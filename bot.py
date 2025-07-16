@@ -83,7 +83,6 @@ def initialize_user_chats(user_id: int):
         user_chats[user_id] = {"groups": set(), "channels": set()}
         
         
-        
 # /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -134,9 +133,38 @@ Examples:
         await update_or_query.message.reply_text(text, parse_mode="Markdown")
     else:
         await update_or_query.edit_message_text(text, parse_mode="Markdown")
-        
-        
-        
+
+
+# Show user's groups as inline buttons
+async def show_user_groups(query):
+    user_id = query.from_user.id
+    groups = user_chats.get(user_id, {}).get("groups", set())
+    if not groups:
+        await query.edit_message_text("😕 آپ نے ابھی کسی گروپ میں اس بوٹ کو شامل نہیں کیا۔")
+        return
+
+    kb = []
+    for gid in groups:
+        kb.append([InlineKeyboardButton(f"Group: {gid}", callback_data=f"group_{gid}")])
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
+    await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
+
+# Show user's channels as inline buttons
+async def show_user_channels(query):
+    user_id = query.from_user.id
+    channels = user_chats.get(user_id, {}).get("channels", set())
+    if not channels:
+        await query.edit_message_text("😕 آپ نے ابھی کسی چینل میں اس بوٹ کو شامل نہیں کیا۔")
+        return
+
+    kb = []
+    for cid in channels:
+        kb.append([InlineKeyboardButton(f"Channel: {cid}", callback_data=f"group_{cid}")])
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
+    await query.edit_message_text("📢 آپ کے چینلز:", reply_markup=InlineKeyboardMarkup(kb))
+    
+    
+    
 # Show settings menu for a group
 async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandler], gid: int):
     initialize_group_settings(gid)
@@ -189,37 +217,6 @@ async def show_mention_settings(query: CallbackQueryHandler, gid: int):
     await query.edit_message_text("🗣 *Mention Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
     
     
-    
-    
-# Show user's groups as inline buttons
-async def show_user_groups(query):
-    user_id = query.from_user.id
-    groups = user_chats.get(user_id, {}).get("groups", set())
-    if not groups:
-        await query.edit_message_text("😕 آپ نے ابھی کسی گروپ میں اس بوٹ کو شامل نہیں کیا۔")
-        return
-
-    kb = []
-    for gid in groups:
-        kb.append([InlineKeyboardButton(f"Group: {gid}", callback_data=f"group_{gid}")])
-    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
-    await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
-
-# Show user's channels as inline buttons
-async def show_user_channels(query):
-    user_id = query.from_user.id
-    channels = user_chats.get(user_id, {}).get("channels", set())
-    if not channels:
-        await query.edit_message_text("😕 آپ نے ابھی کسی چینل میں اس بوٹ کو شامل نہیں کیا۔")
-        return
-
-    kb = []
-    for cid in channels:
-        kb.append([InlineKeyboardButton(f"Channel: {cid}", callback_data=f"group_{cid}")])
-    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
-    await query.edit_message_text("📢 آپ کے چینلز:", reply_markup=InlineKeyboardMarkup(kb))
-
-
 # Main button handler for all inline buttons
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -322,8 +319,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text("❌ کچھ غلط ہوگیا، دوبارہ کوشش کریں۔")
         
         
-        
-        
 # Check admin rights
 async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
@@ -332,6 +327,7 @@ async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Admin check failed: {e}")
         return False
+
 
 # Main
 if __name__ == "__main__":
@@ -344,4 +340,3 @@ if __name__ == "__main__":
 
     print("🤖 Bot is running...")
     app.run_polling()
-    
