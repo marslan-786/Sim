@@ -223,7 +223,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if data == "force_start":
-    return await start(update, context)
+            return await start(update, context)
         if data == "your_groups":
             return await show_user_groups(q)
         if data == "your_channels":
