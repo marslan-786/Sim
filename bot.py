@@ -412,17 +412,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 🔗 لنک سیٹنگز
         if data.startswith("toggle_links_enabled_"):
             gid = int(data.rsplit("_", 1)[1])
-
-            # 👇 یہ لائن لازمی add کریں تاکہ dict initialize ہو
             initialize_group_settings(gid)
-
             s = action_settings[gid]["links"]
             s["enabled"] = not s["enabled"]
-
-            # 👇 اب safe ہے یہ لائن لگانا
             group_settings[gid]["block_links"] = s["enabled"]
 
-        if not s["enabled"] and s["action"] == "delete":
+            if not s["enabled"] and s["action"] == "delete":
             s["action"] = "mute"
 
             return await show_link_settings(q, gid)
