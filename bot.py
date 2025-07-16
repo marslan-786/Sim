@@ -130,6 +130,7 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
     keyboard = [
         [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
         [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
@@ -138,21 +139,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    try:
-        if update.message:
-            await update.message.reply_html(
-                f"👋 Welcome <b>{user.first_name}</b>!\n\n"
-                "I'm your group management bot. Use the buttons below to begin!",
-                reply_markup=reply_markup
-            )
-        elif update.callback_query:
-            await update.callback_query.message.reply_html(
-                f"👋 Welcome <b>{user.first_name}</b>!\n\n"
-                "I'm your group management bot. Use the buttons below to begin!",
-                reply_markup=reply_markup
-            )
-    except Exception as e:
-        logger.error(f"start() error: {e}")
+    text = (
+        f"👋 Welcome <b>{user.first_name}</b>!\n\n"
+        "I'm your group management bot. Use the buttons below to begin!"
+    )
+
+    # Check if this is a message or a callback_query
+    if update.message:
+        await update.message.reply_html(text, reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
 
 # /help handler
 async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
