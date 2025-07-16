@@ -222,15 +222,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     try:
-        if data == "start":  # "🏠 مینو" بٹن یہاں ہینڈل ہوگا
-            return await start(update, context)
+        if data == "start":
+            # اصل میں /start کمانڈ بھیجیں
+            await context.bot.send_message(
+                chat_id=uid,
+                text="/start",
+                parse_mode="Markdown"
+            )
+            return
         if data == "your_groups":
             return await show_user_groups(q)
         if data == "your_channels":
             return await show_user_channels(q)
         if data == "help_command":
             return await show_help(q, context)
-
+        
         if data.startswith("group_"):
             gid = int(data.split("_",1)[1])
             if await is_admin(gid, uid, context):
