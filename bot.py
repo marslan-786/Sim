@@ -219,20 +219,17 @@ async def show_link_settings(query, gid):
     s = action_settings[gid]["links"]
     buttons = []
 
-    # فلٹر آن/آف
     buttons.append([InlineKeyboardButton(
         f"✅ لنک فلٹرنگ: {'آن' if s['enabled'] else 'آف'}", 
         callback_data=f"toggle_links_enabled_{gid}"
     )])
 
     if s["enabled"]:
-        # ایکشن بٹن (mute -> ban -> warn cycle)
         buttons.append([InlineKeyboardButton(
             f"🎯 ایکشن: {s['action'].capitalize()}",
             callback_data=f"cycle_link_action_{gid}"
         )])
 
-        # اگر ایکشن warn ہو تو وارننگ لیول کا بٹن دکھائیں ورنہ نہیں
         if s['action'] == "warn":
             warn_count = s.get('warn_count', 1)
             buttons.append([InlineKeyboardButton(
@@ -240,13 +237,11 @@ async def show_link_settings(query, gid):
                 callback_data=f"cycle_link_warn_count_{gid}"
             )])
 
-        # دورانیہ بٹن
         buttons.append([InlineKeyboardButton(
             f"⏰ دورانیہ: {s['duration']}",
             callback_data=f"change_link_duration_{gid}"
         )])
 
-    # واپس بٹن
     buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
     await query.edit_message_text(
@@ -263,7 +258,7 @@ async def show_forward_settings(query, gid):
     ]
     if s["enabled"]:
         buttons += [
-            [InlineKeyboardButton(f"🎯 ایکشن: {s['action']}", callback_data=f"cycle_forward_action_{gid}")],
+            [InlineKeyboardButton(f"🎯 ایکشن: {s['action'].capitalize()}", callback_data=f"cycle_forward_action_{gid}")],
             [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
             [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_forward_warn_{gid}")]
         ]
@@ -283,7 +278,7 @@ async def show_mention_settings(query, gid):
     ]
     if s["enabled"]:
         buttons += [
-            [InlineKeyboardButton(f"🎯 ایکشن: {s['action']}", callback_data=f"cycle_mention_action_{gid}")],
+            [InlineKeyboardButton(f"🎯 ایکشن: {s['action'].capitalize()}", callback_data=f"cycle_mention_action_{gid}")],
             [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
             [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_mention_warn_{gid}")]
         ]
