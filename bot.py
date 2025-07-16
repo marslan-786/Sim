@@ -145,10 +145,9 @@ async def show_user_groups(query):
     kb = []
     for gid in groups:
         kb.append([InlineKeyboardButton(f"گروپ: {gid}", callback_data=f"group_{gid}")])
-    kb.append([InlineKeyboardButton("🔙 واپس", callback_data="start_back")])  # تبدیل شدہ
+    kb.append([InlineKeyboardButton("🏠 مینو", callback_data="start")])  # تبدیل شدہ
     await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
 
-# یوزر کے چینلز کو بٹنز کی صورت میں دکھانا
 async def show_user_channels(query):
     user_id = query.from_user.id
     channels = user_chats.get(user_id, {}).get("channels", set())
@@ -159,7 +158,7 @@ async def show_user_channels(query):
     kb = []
     for cid in channels:
         kb.append([InlineKeyboardButton(f"چینل: {cid}", callback_data=f"group_{cid}")])
-    kb.append([InlineKeyboardButton("🔙 واپس", callback_data="start_back")])  # تبدیل شدہ
+    kb.append([InlineKeyboardButton("🏠 مینو", callback_data="start")])  # تبدیل شدہ
     await query.edit_message_text("📢 آپ کے چینلز:", reply_markup=InlineKeyboardMarkup(kb))
     
     
@@ -223,7 +222,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     try:
-        if data == "start" or data == "start_back":  # تبدیل شدہ
+        if data == "start":  # "🏠 مینو" بٹن یہاں ہینڈل ہوگا
             return await start(update, context)
         if data == "your_groups":
             return await show_user_groups(q)
