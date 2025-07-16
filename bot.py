@@ -3,23 +3,13 @@ import re
 from datetime import datetime, timedelta
 from typing import Dict, Set, List, Union
 from telegram.ext import ContextTypes
-
 from telegram import (
-    Update,
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    ChatPermissions,
-    MessageEntity
+    Update, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
+    ChatPermissions, MessageEntity
 )
-
 from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    filters,
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters,
 )
 
 # Logging setup
@@ -29,40 +19,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Memory data stores
-channel_settings = {}  # channel_id -> {"remove_forward_tag": True/False}
-channel_forward_settings = {}  # user_id -> {"remove_forward_tag": True}
-user_state = {}  # user_id -> {"state": ..., "gid": ...}
-user_custom_add: Dict[int, int] = {}  # user_id -> group_id
-group_settings: Dict[int, dict] = {}  # group_id -> {"title": ..., etc.}
-action_settings: Dict[int, dict] = {}  # group_id -> {"links": {...}, "forward": {...}, etc.}
-user_chats: Dict[int, Dict[str, Set[int]]] = {}  # user_id -> {"groups": set(), "channels": set()}
-user_warnings: Dict[int, Dict[int, int]] = {}  # chat_id -> {user_id: warning_count}
-admin_list: Dict[int, List[int]] = {}  # chat_id -> list of admin user_ids
+# In-memory storage
+group_settings: Dict[int, dict] = {}
+action_settings: Dict[int, dict] = {}
+user_state: Dict[int, dict] = {}
+user_warnings: Dict[int, Dict[int, int]] = {}
+admin_list: Dict[int, List[int]] = {}
+user_chats: Dict[int, Dict[str, Set[int]]] = {}
 
-# Optional (Advanced Features)
-group_language: Dict[int, str] = {}  # group_id -> "en" or "ur"
-message_logs: Dict[int, List[dict]] = {}  # group_id -> list of message logs
-
-# Duration parser helper
+# Duration helpers
 def parse_duration(duration_str: str) -> timedelta:
-    """
-    Parse duration string to timedelta.
-    Supported formats: 30m, 1h, 6h, 1d, 3d, 7d
-    or in words: "30 minutes", "1 hour", "3 days", etc.
-    Defaults to 1 hour if invalid or missing.
-    """
     if not duration_str:
         return timedelta(hours=1)
-
     duration_str = duration_str.strip().lower()
     match = re.match(r"(\d+)\s*(m|min|minute|minutes|h|hr|hour|hours|d|day|days)?", duration_str)
     if not match:
         return timedelta(hours=1)
-
     value = int(match.group(1))
     unit = match.group(2) or "h"
-
     if unit.startswith("m"):
         return timedelta(minutes=value)
     elif unit.startswith("h"):
@@ -72,13 +46,11 @@ def parse_duration(duration_str: str) -> timedelta:
     else:
         return timedelta(hours=1)
 
-# Format duration into human-readable string
 def format_duration(duration: timedelta) -> str:
     days = duration.days
     seconds = duration.seconds
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
-
     if days > 0:
         return f"{days} day(s)"
     elif hours > 0:
@@ -88,7 +60,7 @@ def format_duration(duration: timedelta) -> str:
     else:
         return "a few seconds"
 
-# Default group settings
+# Default group init
 def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str = None, user_id: int = None):
     if chat_id not in group_settings:
         group_settings[chat_id] = {
@@ -100,7 +72,6 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
             "allowed_domains": set(),
             "chat_type": chat_type
         }
-
     if chat_id not in action_settings:
         action_settings[chat_id] = {
             "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
@@ -108,88 +79,49 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
             "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
             "custom": {
                 "enabled": False,
-                "action": "off",  # 'off', 'mute', 'ban', 'warn'
-                "warn_count": 1,
-                "duration": "1h",
-                "messages": []
+                "action": "off", "warn_count": 1,
+                "duration": "1h", "messages": []
             }
         }
-
     if chat_id not in admin_list:
-        admin_list[chat_id] = {}
-
+        admin_list[chat_id] = []
     if chat_id not in user_warnings:
         user_warnings[chat_id] = {}
-
     if user_id is not None:
-        if user_id not in user_chats:
-            user_chats[user_id] = {"groups": set(), "channels": set()}
-        user_chats[user_id]["groups"].add(chat_id)
+        user_chats.setdefault(user_id, {}).setdefault("groups", set()).add(chat_id)
 
-# Track user's groups/channels
-# /start command handler
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
-
-    # If the bot is added in a group
     if chat.type in ["group", "supergroup"]:
-        initialize_group_settings(chat.id, chat.type)
-        user_chats.setdefault(user.id, {}).setdefault("groups", set()).add(chat.id)
+        initialize_group_settings(chat.id, chat.type, chat.title, user.id)
         return
-
-    # Private chat (or forced start from menu)
     keyboard = [
         [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
         [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
-        [InlineKeyboardButton("📢 Your Channels", callback_data="your_channels")],
         [InlineKeyboardButton("❓ Help", callback_data="help_command")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    message_text = f"👋 Welcome <b>{user.first_name}</b>!\n\nI'm your group management bot. Use the buttons below to begin!"
+    await update.message.reply_html(message_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
-    message_text = (
-        f"👋 Welcome <b>{user.first_name}</b>!\n\n"
-        "I'm your group management bot. Use the buttons below to begin!"
-    )
-
-    if update.message:
-        await update.message.reply_html(message_text, reply_markup=reply_markup)
-
-    elif update.callback_query:
-        try:
-            await update.callback_query.message.edit_text(
-                text=message_text,
-                reply_markup=reply_markup,
-                parse_mode="HTML"
-            )
-        except:
-            # If the message was deleted or can't be edited
-            await update.callback_query.message.reply_html(message_text, reply_markup=reply_markup)
-
-    # Acknowledge the callback (removes loading animation)
-    if update.callback_query:
-        await update.callback_query.answer()
-
-# /help handler
-async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
+# /help
+async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
 🤖 *Bot Commands*:
 
 *Admin Commands:*
-/ban [duration] – Ban a user (use as reply)
-/mute [duration] – Mute a user (use as reply)
-/unban – Unban a user
-/unmute – Unmute a user
-/settings – Configure group settings
+/ban [duration] – Ban a user (reply to user)
+/mute [duration] – Mute a user (reply to user)
+/unban – Unban user
+/unmute – Unmute user
+/settings – Open settings
 
 Examples:
 /ban 1h – Ban for 1 hour
 /mute 2d – Mute for 2 days
 """
-    if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(text, parse_mode="Markdown")
-    else:
-        await update_or_query.edit_message_text(text, parse_mode="Markdown")
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 # Show user's groups as buttons
@@ -211,60 +143,6 @@ async def show_user_groups(query):
 
     kb.append([InlineKeyboardButton("🏠 Main Menu", callback_data="force_start")])
     await query.edit_message_text("📊 Your Groups:", reply_markup=InlineKeyboardMarkup(kb))
-
-# Show user's channels as buttons
-async def toggle_forward_removal(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
-    user_id = query.from_user.id
-
-    # Initialize default setting if not set
-    if user_id not in channel_forward_settings:
-        channel_forward_settings[user_id] = {"remove_forward_tag": False}
-
-    # Get current state
-    current_state = channel_forward_settings[user_id]["remove_forward_tag"]
-
-    # Toggle the state
-    channel_forward_settings[user_id]["remove_forward_tag"] = not current_state
-
-    # Get the new state
-    new_state = channel_forward_settings[user_id]["remove_forward_tag"]
-    status = "✅ ON" if new_state else "❌ OFF"
-    toggle_text = f"🔁 Forward Tag Removal: {status}"
-
-    # Build keyboard
-    keyboard = [
-        [InlineKeyboardButton(toggle_text, callback_data="toggle_forward_removal")],
-        [InlineKeyboardButton("🏠 Main Menu", callback_data="force_start")]
-    ]
-
-    # Update the message
-    await query.edit_message_text(
-        text="📢 Channel Settings:\n\nChoose what to do with forwarded messages:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-    # Acknowledge callback to remove "loading..." popup
-    await query.answer()
-    
-async def global_channel_settings(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
-    user_id = query.from_user.id
-
-    if user_id not in channel_forward_settings:
-        channel_forward_settings[user_id] = {"remove_forward_tag": False}
-
-    current_state = channel_forward_settings[user_id]["remove_forward_tag"]
-    status = "✅ ON" if current_state else "❌ OFF"
-    toggle_text = f"🔁 Forward Tag Removal: {status}"
-
-    keyboard = [
-        [InlineKeyboardButton(toggle_text, callback_data="toggle_forward_removal")],
-        [InlineKeyboardButton("🏠 Main Menu", callback_data="force_start")]
-    ]
-
-    await query.edit_message_text(
-        text="📢 Channel Settings:\n\nChoose what to do with forwarded messages:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
 
 # Show group settings menu
 async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandler], gid: int):
@@ -449,50 +327,42 @@ async def message_filter_handler(update: Update, context: ContextTypes.DEFAULT_T
     user_id = message.from_user.id
     chat_id = message.chat_id
 
-    # ✅ Remove forward tag only in private chat
-    if message.forward_from_chat and message.chat.type == "private":
-        if channel_forward_settings.get(user_id, {}).get("remove_forward_tag", False):
-            try:
-                await message.delete()
-                await context.bot.copy_message(
-                    chat_id=chat_id,
-                    from_chat_id=message.forward_from_chat.id,
-                    message_id=message.forward_from_message_id
-                )
-                return  # stop here if forward tag was removed
-            except Exception as e:
-                logger.warning(f"Failed to remove forward tag: {e}")
+    # ✅ Only run in group/supergroup
+    if message.chat.type not in ["group", "supergroup"]:
+        return
 
-    # ✅ Group filters (apply_action)
-    if message.chat.type in ["group", "supergroup"]:
-        if chat_id not in group_settings or user_id == context.bot.id:
-            return
+    if chat_id not in group_settings or user_id == context.bot.id:
+        return
 
-        text = message.text or message.caption or ""
-        is_forwarded = message.forward_from or message.forward_from_chat
-        has_links = bool(re.search(r"https?://|t\.me|telegram\.me|www\.", text))
-        has_mentions = any(e.type in [MessageEntity.MENTION, MessageEntity.TEXT_MENTION] for e in message.entities or [])
+    text = message.text or message.caption or ""
+    is_forwarded = message.forward_from or message.forward_from_chat
+    has_links = bool(re.search(r"https?://|t\.me|telegram\.me|www\.", text))
+    has_mentions = any(e.type in [MessageEntity.MENTION, MessageEntity.TEXT_MENTION] for e in message.entities or [])
 
-        actions = action_settings.get(chat_id, {})
-        settings = group_settings.get(chat_id, {})
+    actions = action_settings.get(chat_id, {})
+    settings = group_settings.get(chat_id, {})
 
-        try:
-            if settings.get("block_links") and actions.get("links", {}).get("enabled") and has_links:
-                return await apply_action("links", chat_id, user_id, message, context)
+    try:
+        # ✅ Link Filter
+        if settings.get("block_links") and actions.get("links", {}).get("enabled") and has_links:
+            return await apply_action("links", chat_id, user_id, message, context)
 
-            elif settings.get("block_forwards") and actions.get("forward", {}).get("enabled") and is_forwarded:
-                return await apply_action("forward", chat_id, user_id, message, context)
+        # ✅ Forward Filter
+        elif settings.get("block_forwards") and actions.get("forward", {}).get("enabled") and is_forwarded:
+            return await apply_action("forward", chat_id, user_id, message, context)
 
-            elif settings.get("block_mentions") and actions.get("mentions", {}).get("enabled") and has_mentions:
-                return await apply_action("mentions", chat_id, user_id, message, context)
+        # ✅ Mention Filter
+        elif settings.get("block_mentions") and actions.get("mentions", {}).get("enabled") and has_mentions:
+            return await apply_action("mentions", chat_id, user_id, message, context)
 
-            elif actions.get("custom", {}).get("enabled") and "custom_messages" in group_settings[chat_id]:
-                for word in group_settings[chat_id]["custom_messages"]:
-                    if word.lower() in text.lower():
-                        return await apply_action("custom", chat_id, user_id, message, context)
+        # ✅ Custom Filter
+        elif actions.get("custom", {}).get("enabled") and "custom_messages" in group_settings[chat_id]:
+            for word in group_settings[chat_id]["custom_messages"]:
+                if word.lower() in text.lower():
+                    return await apply_action("custom", chat_id, user_id, message, context)
 
-        except Exception as e:
-            logger.error(f"Filter Handler Error: {e}")
+    except Exception as e:
+        logger.error(f"[Filter Handler Error] {e}")
 
 
 # Apply mute/ban/warn action
@@ -622,9 +492,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "your_groups":
             return await show_user_groups(q)
 
-        if data == "your_channels":
-            return await show_user_channels(q)
-
         if data == "help_command":
             return await show_help(q, context)
 
@@ -643,10 +510,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data.startswith("link_settings_"):
             gid = int(data.rsplit("_",1)[1])
             return await show_link_settings(q, gid)
-
-        if data.startswith("forward_settings_"):
-            gid = int(data.rsplit("_",1)[1])
-            return await show_forward_settings(q, gid)
 
         if data.startswith("mention_settings_"):
             gid = int(data.rsplit("_",1)[1])
@@ -684,40 +547,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_settings[gid]["links"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_link_settings(q, gid)
 
-        # Forward filter settings
-        if data.startswith("toggle_forward_enabled_"):
-            gid = int(data.rsplit("_",1)[1])
-            initialize_group_settings(gid)
-            s = action_settings[gid]["forward"]
-            s['enabled'] = not s['enabled']
-            group_settings[gid]["block_forwards"] = s["enabled"]
-            if not s["enabled"]:
-                s["action"] = "off"
-            return await show_forward_settings(q, gid)
-
-        if data.startswith("cycle_forward_action_"):
-            gid = int(data.rsplit("_",1)[1])
-            s = action_settings[gid]["forward"]
-            options = ['off', 'mute', 'ban', 'warn']
-            s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
-            return await show_forward_settings(q, gid)
-
-        if data.startswith("cycle_forward_warn_count_"):
-            gid = int(data.rsplit("_",1)[1])
-            s = action_settings[gid]["forward"]
-            count = s.get('warn_count', 1)
-            count = 1 if count >= 3 else count + 1
-            s['warn_count'] = count
-            return await show_forward_settings(q, gid)
-
-        if data.startswith("change_forward_duration_"):
-            gid = int(data.rsplit("_",1)[1])
-            opts = ["30m","1h","6h","1d","3d","7d"]
-            cur = action_settings[gid]["forward"]["duration"]
-            action_settings[gid]["forward"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
-            return await show_forward_settings(q, gid)
-
-        # Mention settings
         if data.startswith("toggle_mention_enabled_"):
             gid = int(data.rsplit("_",1)[1])
             initialize_group_settings(gid)
@@ -749,18 +578,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cur = action_settings[gid]["mentions"]["duration"]
             action_settings[gid]["mentions"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_mention_settings(q, gid)
-            
-        # --- Unmute button ---
+
         if data.startswith("unmute_"):
             _, gid, uid = data.split("_")
             gid, uid = int(gid), int(uid)
-            
             if not await is_admin(gid, q.from_user.id, context):
                return await q.answer("⚠️ Only admins can perform this action.", show_alert=True)
             try:
-                permissions = ChatPermissions(
-                    can_send_messages=True,
-                )
+                permissions = ChatPermissions(can_send_messages=True)
                 await context.bot.restrict_chat_member(gid, uid, permissions=permissions)
                 await q.edit_message_text("✅ User has been unmuted.")
             except Exception as e:
@@ -768,7 +593,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("❌ Failed to unmute.", show_alert=True)
             return
 
-        # --- Unban button ---
         if data.startswith("unban_"):
             _, gid, uid = data.split("_")
             gid, uid = int(gid), int(uid)
@@ -782,7 +606,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("❌ Failed to unban.", show_alert=True)
             return
 
-        # --- Increase Warning ---
         if data.startswith("warnadd_"):
             _, gid, uid = data.split("_")
             gid, uid = int(gid), int(uid)
@@ -792,7 +615,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(f"✅ Warning increased to {warn_count}.", show_alert=True)
             return
 
-        # --- Decrease Warning ---
         if data.startswith("warndec_"):
             _, gid, uid = data.split("_")
             gid, uid = int(gid), int(uid)
@@ -803,7 +625,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(f"✅ Warning decreased to {user_warnings[gid][uid]}.", show_alert=True)
             return
 
-        # --- Reset Warnings ---
         if data.startswith("warnreset_"):
             _, gid, uid = data.split("_")
             gid, uid = int(gid), int(uid)
@@ -812,7 +633,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("✅ Warnings have been reset.", show_alert=True)
             return
 
-        # Custom message filter settings
         if data.startswith("custom_settings_"):
             gid = int(data.rsplit("_", 1)[1])
             return await show_custom_settings(q, gid)
@@ -861,194 +681,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Callback Error: {e}")
         await q.edit_message_text("❌ Something went wrong, please try again.")
-        
-# /ban Command Handler
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
-    if not await is_admin(chat_id, user_id, context):
-        await message.reply_text("❌ Only admins can use this command!")
-        return
-
-    if not message.reply_to_message:
-        return await message.reply_text("⛔ Please use this command in reply to a message.")
-
-    target = message.reply_to_message.from_user
-
-    if context.args:
-        duration_str = context.args[0]
-        duration = parse_duration(duration_str)
-        until_date = datetime.utcnow() + duration
-        duration_text = format_duration(duration)
-    else:
-        until_date = None
-        duration_text = "permanently"
-
-    try:
-        await context.bot.ban_chat_member(chat_id, target.id, until_date=until_date)
-        await message.reply_html(f"🚫 {target.mention_html()} has been banned for {duration_text}.")
-    except Exception as e:
-        logger.error(f"/ban error: {e}")
-        await message.reply_text("❌ Failed to ban user.")
 
 
-# /mute Command Handler
-async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
-    if not await is_admin(chat_id, user_id, context):
-        await message.reply_text("❌ Only admins can use this command!")
-        return
-
-    if not message.reply_to_message:
-        return await message.reply_text("🔇 Please use this command in reply to a message.")
-
-    target = message.reply_to_message.from_user
-
-    if context.args:
-        duration_str = context.args[0]
-        duration = parse_duration(duration_str)
-        until_date = datetime.utcnow() + duration
-        duration_text = format_duration(duration)
-    else:
-        until_date = None
-        duration_text = "permanently"
-
-    permissions = ChatPermissions(can_send_messages=False)
-
-    try:
-        await context.bot.restrict_chat_member(chat_id, target.id, permissions=permissions, until_date=until_date)
-        await message.reply_html(f"🔇 {target.mention_html()} has been muted for {duration_text}.")
-    except Exception as e:
-        logger.error(f"/mute error: {e}")
-        await message.reply_text("❌ Failed to mute user.")
-
-
-# /warn Command Handler
-async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
-    if not await is_admin(chat_id, user_id, context):
-        await message.reply_text("❌ Only admins can use this command!")
-        return
-
-    if not message.reply_to_message:
-        return await message.reply_text("⚠️ Please use this command in reply to a message.")
-
-    target_id = message.reply_to_message.from_user.id
-    initialize_group_settings(chat_id)
-
-    user_warnings[chat_id][target_id] = user_warnings[chat_id].get(target_id, 0) + 1
-    count = user_warnings[chat_id][target_id]
-
-    await message.reply_text(f"⚠️ Warning {count}/3 issued.")
-
-    if count >= 3:
-        await context.bot.ban_chat_member(chat_id, target_id, until_date=datetime.utcnow() + timedelta(hours=1))
-        user_warnings[chat_id][target_id] = 0
-        await message.reply_text("🚫 Too many warnings. User has been banned for 1 hour.")
-
-
-# /unban Command Handler
-async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
-    if not await is_admin(chat_id, user_id, context):
-        await message.reply_text("❌ Only admins can use this command!")
-        return
-
-    if not message.reply_to_message:
-        return await message.reply_text("🟢 Reply to a user's message to unban.")
-
-    target_id = message.reply_to_message.from_user.id
-
-    try:
-        member = await context.bot.get_chat_member(chat_id, target_id)
-
-        if member.status != "kicked":
-            return await message.reply_text("ℹ️ This user is not banned or already unbanned.")
-
-        await context.bot.unban_chat_member(chat_id, target_id)
-        await message.reply_text("✅ User has been unbanned.")
-
-    except Exception as e:
-        logger.error(f"/unban error: {e}")
-        await message.reply_text("❌ Failed to unban user.")
-
-
-# /unmute Command Handler
-async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-
-    if not await is_admin(chat_id, user_id, context):
-        return await message.reply_text("❌ Only admins can use this command!")
-
-    if not message.reply_to_message:
-        return await message.reply_text("🔓 Use this command by replying to the muted user's message.")
-
-    target_id = message.reply_to_message.from_user.id
-
-    try:
-        # Get the member info
-        member = await context.bot.get_chat_member(chat_id, target_id)
-
-        # Check if already unrestricted
-        if member.can_send_messages:
-            return await message.reply_text("ℹ️ This user is already unmuted.")
-
-        # Apply full permissions to unmute
-        full_permissions = ChatPermissions(
-            can_send_messages=True,
-        )
-
-        await context.bot.restrict_chat_member(chat_id, target_id, permissions=full_permissions)
-        return await message.reply_text("✅ User has been unmuted.")
-
-    except Exception as e:
-        logger.error(f"/unmute error: {e}")
-        return await message.reply_text("❌ Failed to unmute the user.")
-
-
-# /settings command - Only for groups
-async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    chat = message.chat
-    user_id = message.from_user.id
-    chat_id = chat.id
-
-    if not await is_admin(chat_id, user_id, context):
-        await message.reply_text("❌ Only admins can use this command!")
-        return
-
-    if chat.type not in ["group", "supergroup"]:
-        await message.reply_text("⚙️ This command is only available in group chats.")
-        return
-
-    initialize_group_settings(chat_id)
-    await show_group_settings(update, chat_id)
-
-
-# Admin Check Utility
-async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    try:
-        admins = await context.bot.get_chat_administrators(chat_id)
-        return any(a.user.id == user_id for a in admins)
-    except Exception as e:
-        logger.error(f"Admin check failed: {e}")
-        return False
-
-
-# Main
+# Main app runner
 if __name__ == "__main__":
     TOKEN = "7735984673:AAGEhbsdIfO-j8B3DvBwBW9JSb9BcPd_J6o"  # Insert your bot token here
     app = ApplicationBuilder().token(TOKEN).build()
@@ -1062,14 +697,10 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("unmute", unmute_user))
     app.add_handler(CommandHandler("settings", settings_command))
 
-    app.add_handler(CallbackQueryHandler(global_channel_settings, pattern="^channel_settings$"))
-    app.add_handler(CallbackQueryHandler(toggle_forward_removal, pattern="^toggle_forward_removal$"))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # 👇 TEXT handlers must be last group (so commands don't get blocked)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_message_input_handler), group=10)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_filter_handler), group=10)
-    
 
     print("🤖 Bot is running...")
     app.run_polling()
