@@ -215,39 +215,66 @@ async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandle
         await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
 # لنک سیٹنگز سب مینو دکھانا
-async def show_link_settings(query: CallbackQueryHandler, gid: int):
+async def show_link_settings(query, gid):
     s = action_settings[gid]["links"]
+    warn_count = s.get("warn_count", 3)
+
     kb = [
-        [InlineKeyboardButton(f"فعال: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_links_enabled_{gid}")],
-        [InlineKeyboardButton(f"کارروائی: {s['action']}", callback_data=f"cycle_link_action_{gid}")],
+        # یہ بٹن پورے فیچر کو آن/آف کرے گا، مطلب اگر آن ہوگا تو پیغامات ڈیلیٹ ہوتے رہیں گے
+        [InlineKeyboardButton(f"فعال: {'✅ (پیغام خودبخود ڈیلیٹ ہوگا)' if s['enabled'] else '❌'}", callback_data=f"toggle_links_enabled_{gid}")],
+
+        # یہ بٹن صرف mute/ban/warn سیلیکٹ کرے گا (delete option ہٹا دی)
+        [InlineKeyboardButton(f"کارروائی: {s['action'] if s['action'] != 'delete' else 'mute'}", callback_data=f"cycle_link_action_{gid}")],
+
+        # مدت
         [InlineKeyboardButton(f"مدت: {s['duration']}", callback_data=f"change_link_duration_{gid}")],
-        [InlineKeyboardButton(f"وارننگ: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_link_warn_{gid}")],
-        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]  # تبدیل شدہ
     ]
+
+    # warn action ہے تو warning count کا بٹن دکھائیں
+    if s['action'] == "warn":
+        kb.append([InlineKeyboardButton(f"وارننگ حد: {warn_count}", callback_data=f"change_link_warn_count_{gid}")])
+
+    # وارننگ کو فعال یا غیر فعال کریں
+    kb.append([InlineKeyboardButton(f"وارننگ فعال: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_link_warn_{gid}")])
+
+    kb.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
+
     await query.edit_message_text("🔗 *لنک سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
 # فارورڈ سیٹنگز سب مینو دکھانا
-async def show_forward_settings(query: CallbackQueryHandler, gid: int):
+async def show_forward_settings(query, gid):
     s = action_settings[gid]["forward"]
+
     kb = [
-        [InlineKeyboardButton(f"فعال: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_forward_enabled_{gid}")],
+        [InlineKeyboardButton(f"فعال: {'✅ (میسج ڈیلیٹ ہوگا)' if s['enabled'] else '❌'}", callback_data=f"toggle_forward_enabled_{gid}")],
+
         [InlineKeyboardButton(f"کارروائی: {s['action']}", callback_data=f"cycle_forward_action_{gid}")],
+
         [InlineKeyboardButton(f"مدت: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
-        [InlineKeyboardButton(f"وارننگ: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_forward_warn_{gid}")],
-        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]  # تبدیل شدہ
+
+        [InlineKeyboardButton(f"وارننگ فعال: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_forward_warn_{gid}")],
+
+        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]
     ]
-    await query.edit_message_text("↩️ *فارورڈ سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+
+    await query.edit_message_text("📤 *فارورڈ میسج سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
 # مینشن سیٹنگز سب مینو دکھانا
-async def show_mention_settings(query: CallbackQueryHandler, gid: int):
+async def show_mention_settings(query, gid):
     s = action_settings[gid]["mentions"]
+
     kb = [
-        [InlineKeyboardButton(f"فعال: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_mention_enabled_{gid}")],
+        [InlineKeyboardButton(f"فعال: {'✅ (میسج ڈیلیٹ ہوگا)' if s['enabled'] else '❌'}", callback_data=f"toggle_mention_enabled_{gid}")],
+
         [InlineKeyboardButton(f"کارروائی: {s['action']}", callback_data=f"cycle_mention_action_{gid}")],
+
         [InlineKeyboardButton(f"مدت: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
-        [InlineKeyboardButton(f"وارننگ: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_mention_warn_{gid}")],
-        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]  # تبدیل شدہ
+
+        [InlineKeyboardButton(f"وارننگ فعال: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_mention_warn_{gid}")],
+
+        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]
     ]
+
     await query.edit_message_text("🗣 *مینشن سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
     
     
@@ -268,86 +295,106 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data == "help_command":
             return await show_help(q, context)
         
+        # گروپ منتخب کرنے پر
         if data.startswith("group_"):
             gid = int(data.split("_",1)[1])
             if await is_admin(gid, uid, context):
                 return await show_group_settings(q, gid)
             return await q.answer("⚠️ صرف ایڈمنز کے لیے!", show_alert=True)
 
-        # گروپ سیٹنگز واپس جانے کے لیے
+        # گروپ سیٹنگز میں واپس جانے کے لیے
         if data.startswith("group_settings_"):
             gid = int(data.split("_",2)[2])
             if await is_admin(gid, uid, context):
                 return await show_group_settings(q, gid)
             return await q.answer("⚠️ صرف ایڈمنز کے لیے!", show_alert=True)
 
-        # لنک ٹوگلز
+        # 🔗 لنک سیٹنگز
         if data.startswith("toggle_links_enabled_"):
             gid = int(data.rsplit("_",1)[1])
-            action_settings[gid]["links"]["enabled"] = not action_settings[gid]["links"]["enabled"]
+            s = action_settings[gid]["links"]
+            s['enabled'] = not s['enabled']
+            if not s['enabled'] and s['action'] == 'delete':
+                s['action'] = 'mute'
             return await show_link_settings(q, gid)
+
         if data.startswith("cycle_link_action_"):
             gid = int(data.rsplit("_",1)[1])
-            opts = ["delete", "mute", "ban"]
-            cur = action_settings[gid]["links"]["action"]
-            action_settings[gid]["links"]["action"] = opts[(opts.index(cur)+1)%3]
+            s = action_settings[gid]["links"]
+            options = ['mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s['action']) + 1) % len(options)]
             return await show_link_settings(q, gid)
+
         if data.startswith("change_link_duration_"):
             gid = int(data.rsplit("_",1)[1])
             opts = ["30m","1h","6h","1d","3d","7d"]
             cur = action_settings[gid]["links"]["duration"]
             action_settings[gid]["links"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_link_settings(q, gid)
+
         if data.startswith("toggle_link_warn_"):
             gid = int(data.rsplit("_",1)[1])
             action_settings[gid]["links"]["warn"] = not action_settings[gid]["links"]["warn"]
             return await show_link_settings(q, gid)
 
-        # فارورڈ ٹوگلز
+        # 🔁 فارورڈ سیٹنگز
         if data.startswith("toggle_forward_enabled_"):
             gid = int(data.rsplit("_",1)[1])
-            action_settings[gid]["forward"]["enabled"] = not action_settings[gid]["forward"]["enabled"]
+            s = action_settings[gid]["forward"]
+            s['enabled'] = not s['enabled']
+            if not s['enabled'] and s['action'] == 'delete':
+                s['action'] = 'mute'
             return await show_forward_settings(q, gid)
+
         if data.startswith("cycle_forward_action_"):
             gid = int(data.rsplit("_",1)[1])
-            opts = ["delete", "mute", "ban"]
-            cur = action_settings[gid]["forward"]["action"]
-            action_settings[gid]["forward"]["action"] = opts[(opts.index(cur)+1)%3]
+            s = action_settings[gid]["forward"]
+            options = ['mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s['action']) + 1) % len(options)]
             return await show_forward_settings(q, gid)
+
         if data.startswith("change_forward_duration_"):
             gid = int(data.rsplit("_",1)[1])
             opts = ["30m","1h","6h","1d","3d","7d"]
             cur = action_settings[gid]["forward"]["duration"]
             action_settings[gid]["forward"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_forward_settings(q, gid)
+
         if data.startswith("toggle_forward_warn_"):
             gid = int(data.rsplit("_",1)[1])
             action_settings[gid]["forward"]["warn"] = not action_settings[gid]["forward"]["warn"]
             return await show_forward_settings(q, gid)
 
-        # مینشن ٹوگلز
+        # 🗣 مینشن سیٹنگز
         if data.startswith("toggle_mention_enabled_"):
             gid = int(data.rsplit("_",1)[1])
-            action_settings[gid]["mentions"]["enabled"] = not action_settings[gid]["mentions"]["enabled"]
+            s = action_settings[gid]["mentions"]
+            s['enabled'] = not s['enabled']
+            if not s['enabled'] and s['action'] == 'delete':
+                s['action'] = 'mute'
             return await show_mention_settings(q, gid)
+
         if data.startswith("cycle_mention_action_"):
             gid = int(data.rsplit("_",1)[1])
-            opts = ["delete", "mute", "ban"]
-            cur = action_settings[gid]["mentions"]["action"]
-            action_settings[gid]["mentions"]["action"] = opts[(opts.index(cur)+1)%3]
+            s = action_settings[gid]["mentions"]
+            options = ['mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s['action']) + 1) % len(options)]
             return await show_mention_settings(q, gid)
+
         if data.startswith("change_mention_duration_"):
             gid = int(data.rsplit("_",1)[1])
             opts = ["30m","1h","6h","1d","3d","7d"]
             cur = action_settings[gid]["mentions"]["duration"]
             action_settings[gid]["mentions"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_mention_settings(q, gid)
+
         if data.startswith("toggle_mention_warn_"):
             gid = int(data.rsplit("_",1)[1])
             action_settings[gid]["mentions"]["warn"] = not action_settings[gid]["mentions"]["warn"]
             return await show_mention_settings(q, gid)
 
-        await q.answer("نامعلوم بٹن!", show_alert=True)
+        await q.answer("❓ نامعلوم بٹن!", show_alert=True)
+
     except Exception as e:
         logger.error(f"کال بیک ایرر: {e}")
         await q.edit_message_text("❌ کچھ غلط ہوگیا، دوبارہ کوشش کریں۔")
@@ -416,7 +463,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"/mute ایرر: {e}")
         await message.reply_text("❌ میوٹ کرنے میں مسئلہ پیش آیا۔")
-        
+
 # /warn ہینڈلر
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -442,7 +489,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.ban_chat_member(chat_id, target_id, until_date=datetime.utcnow() + timedelta(hours=1))
         user_warnings[chat_id][target_id] = 0
         await message.reply_text("🚫 حد سے زیادہ وارننگز۔ 1 گھنٹے کے لیے بین کر دیا گیا۔")
-
+        
 # /unban ہینڈلر
 async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
