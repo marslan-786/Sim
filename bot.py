@@ -1028,7 +1028,7 @@ async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYP
 
 # Main
 if __name__ == "__main__":
-    TOKEN = "7735984673:AAGEhbsdIfO-j8B3DvBwBW9JSb9BcPd_J6o"  # Insert your bot token here
+    TOKEN = "7405849363:AAH3-6QuSUb2bJvTkpWfqoSlVKeYn-ERfpo"  # Insert your bot token here
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
