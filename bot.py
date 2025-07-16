@@ -217,65 +217,62 @@ async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandle
 # لنک سیٹنگز سب مینو دکھانا
 async def show_link_settings(query, gid):
     s = action_settings[gid]["links"]
-    warn_count = s.get("warn_count", 3)
-
-    kb = [
-        # یہ بٹن پورے فیچر کو آن/آف کرے گا، مطلب اگر آن ہوگا تو پیغامات ڈیلیٹ ہوتے رہیں گے
-        [InlineKeyboardButton(f"فعال: {'✅ (پیغام خودبخود ڈیلیٹ ہوگا)' if s['enabled'] else '❌'}", callback_data=f"toggle_links_enabled_{gid}")],
-
-        # یہ بٹن صرف mute/ban/warn سیلیکٹ کرے گا (delete option ہٹا دی)
-        [InlineKeyboardButton(f"کارروائی: {s['action'] if s['action'] != 'delete' else 'mute'}", callback_data=f"cycle_link_action_{gid}")],
-
-        # مدت
-        [InlineKeyboardButton(f"مدت: {s['duration']}", callback_data=f"change_link_duration_{gid}")],
+    buttons = [
+        [InlineKeyboardButton(f"✅ لنک فلٹرنگ: {'آن' if s['enabled'] else 'آف'}", callback_data=f"toggle_links_enabled_{gid}")],
     ]
+    if s["enabled"]:
+        buttons += [
+            [InlineKeyboardButton(f"🎯 ایکشن: {s['action']}", callback_data=f"cycle_link_action_{gid}")],
+            [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_link_duration_{gid}")],
+            [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_link_warn_{gid}")]
+        ]
+    buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
-    # warn action ہے تو warning count کا بٹن دکھائیں
-    if s['action'] == "warn":
-        kb.append([InlineKeyboardButton(f"وارننگ حد: {warn_count}", callback_data=f"change_link_warn_count_{gid}")])
-
-    # وارننگ کو فعال یا غیر فعال کریں
-    kb.append([InlineKeyboardButton(f"وارننگ فعال: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_link_warn_{gid}")])
-
-    kb.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
-
-    await query.edit_message_text("🔗 *لنک سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+    await query.edit_message_text(
+        text="🔗 *لنک سیٹنگز*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="Markdown"
+    )
 
 # فارورڈ سیٹنگز سب مینو دکھانا
 async def show_forward_settings(query, gid):
     s = action_settings[gid]["forward"]
-
-    kb = [
-        [InlineKeyboardButton(f"فعال: {'✅ (میسج ڈیلیٹ ہوگا)' if s['enabled'] else '❌'}", callback_data=f"toggle_forward_enabled_{gid}")],
-
-        [InlineKeyboardButton(f"کارروائی: {s['action']}", callback_data=f"cycle_forward_action_{gid}")],
-
-        [InlineKeyboardButton(f"مدت: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
-
-        [InlineKeyboardButton(f"وارننگ فعال: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_forward_warn_{gid}")],
-
-        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]
+    buttons = [
+        [InlineKeyboardButton(f"✅ فارورڈ فلٹر: {'آن' if s['enabled'] else 'آف'}", callback_data=f"toggle_forward_enabled_{gid}")],
     ]
+    if s["enabled"]:
+        buttons += [
+            [InlineKeyboardButton(f"🎯 ایکشن: {s['action']}", callback_data=f"cycle_forward_action_{gid}")],
+            [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
+            [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_forward_warn_{gid}")]
+        ]
+    buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
-    await query.edit_message_text("📤 *فارورڈ میسج سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+    await query.edit_message_text(
+        text="📤 *فارورڈ سیٹنگز*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="Markdown"
+    )
 
 # مینشن سیٹنگز سب مینو دکھانا
 async def show_mention_settings(query, gid):
     s = action_settings[gid]["mentions"]
-
-    kb = [
-        [InlineKeyboardButton(f"فعال: {'✅ (میسج ڈیلیٹ ہوگا)' if s['enabled'] else '❌'}", callback_data=f"toggle_mention_enabled_{gid}")],
-
-        [InlineKeyboardButton(f"کارروائی: {s['action']}", callback_data=f"cycle_mention_action_{gid}")],
-
-        [InlineKeyboardButton(f"مدت: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
-
-        [InlineKeyboardButton(f"وارننگ فعال: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_mention_warn_{gid}")],
-
-        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")]
+    buttons = [
+        [InlineKeyboardButton(f"✅ مینشن فلٹر: {'آن' if s['enabled'] else 'آف'}", callback_data=f"toggle_mention_enabled_{gid}")],
     ]
+    if s["enabled"]:
+        buttons += [
+            [InlineKeyboardButton(f"🎯 ایکشن: {s['action']}", callback_data=f"cycle_mention_action_{gid}")],
+            [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
+            [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_mention_warn_{gid}")]
+        ]
+    buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
-    await query.edit_message_text("🗣 *مینشن سیٹنگز*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+    await query.edit_message_text(
+        text="👥 *مینشن سیٹنگز*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="Markdown"
+    )
     
     
 # تمام ان لائن بٹنز کے لیے مین ہینڈلر
@@ -594,7 +591,7 @@ async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYP
 
 # مین
 if __name__ == "__main__":
-    TOKEN = "7405849363:AAH3-6QuSUb2bJvTkpWfqoSlVKeYn-ERfpo"  # اپنا بوٹ ٹوکن یہاں ڈالیں
+    TOKEN = "7735984673:AAGEhbsdIfO-j8B3DvBwBW9JSb9BcPd_J6o"  # اپنا بوٹ ٹوکن یہاں ڈالیں
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
