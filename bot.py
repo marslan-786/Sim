@@ -225,12 +225,15 @@ async def show_link_settings(query, gid):
     )])
 
     if s["enabled"]:
+        options = ['off', 'mute', 'ban', 'warn']
+        current_action = s.get('action', 'off')
+
         buttons.append([InlineKeyboardButton(
-            f"🎯 ایکشن: {s['action'].capitalize()}",
+            f"🎯 ایکشن: {current_action.capitalize()}",
             callback_data=f"cycle_link_action_{gid}"
         )])
 
-        if s['action'] == "warn":
+        if current_action == "warn":
             warn_count = s.get('warn_count', 1)
             buttons.append([InlineKeyboardButton(
                 f"⚠️ وارننگ کی تعداد: {warn_count}",
@@ -238,7 +241,7 @@ async def show_link_settings(query, gid):
             )])
 
         buttons.append([InlineKeyboardButton(
-            f"⏰ دورانیہ: {s['duration']}",
+            f"⏰ دورانیہ: {s.get('duration', '30m')}",
             callback_data=f"change_link_duration_{gid}"
         )])
 
@@ -250,18 +253,37 @@ async def show_link_settings(query, gid):
         parse_mode="Markdown"
     )
 
+
 # فارورڈ سیٹنگز سب مینو دکھانا
 async def show_forward_settings(query, gid):
     s = action_settings[gid]["forward"]
-    buttons = [
-        [InlineKeyboardButton(f"✅ فارورڈ فلٹر: {'آن' if s['enabled'] else 'آف'}", callback_data=f"toggle_forward_enabled_{gid}")],
-    ]
+    buttons = []
+
+    buttons.append([InlineKeyboardButton(
+        f"✅ فارورڈ فلٹر: {'آن' if s['enabled'] else 'آف'}",
+        callback_data=f"toggle_forward_enabled_{gid}"
+    )])
+
     if s["enabled"]:
-        buttons += [
-            [InlineKeyboardButton(f"🎯 ایکشن: {s['action'].capitalize()}", callback_data=f"cycle_forward_action_{gid}")],
-            [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
-            [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_forward_warn_{gid}")]
-        ]
+        current_action = s.get('action', 'off')
+
+        buttons.append([InlineKeyboardButton(
+            f"🎯 ایکشن: {current_action.capitalize()}",
+            callback_data=f"cycle_forward_action_{gid}"
+        )])
+
+        if current_action == "warn":
+            warn_count = s.get('warn_count', 1)
+            buttons.append([InlineKeyboardButton(
+                f"⚠️ وارننگ کی تعداد: {warn_count}",
+                callback_data=f"cycle_forward_warn_count_{gid}"
+            )])
+
+        buttons.append([InlineKeyboardButton(
+            f"⏰ دورانیہ: {s.get('duration', '30m')}",
+            callback_data=f"change_forward_duration_{gid}"
+        )])
+
     buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
     await query.edit_message_text(
@@ -270,18 +292,37 @@ async def show_forward_settings(query, gid):
         parse_mode="Markdown"
     )
 
+
 # مینشن سیٹنگز سب مینو دکھانا
 async def show_mention_settings(query, gid):
     s = action_settings[gid]["mentions"]
-    buttons = [
-        [InlineKeyboardButton(f"✅ مینشن فلٹر: {'آن' if s['enabled'] else 'آف'}", callback_data=f"toggle_mention_enabled_{gid}")],
-    ]
+    buttons = []
+
+    buttons.append([InlineKeyboardButton(
+        f"✅ مینشن فلٹر: {'آن' if s['enabled'] else 'آف'}",
+        callback_data=f"toggle_mention_enabled_{gid}"
+    )])
+
     if s["enabled"]:
-        buttons += [
-            [InlineKeyboardButton(f"🎯 ایکشن: {s['action'].capitalize()}", callback_data=f"cycle_mention_action_{gid}")],
-            [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
-            [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_mention_warn_{gid}")]
-        ]
+        current_action = s.get('action', 'off')
+
+        buttons.append([InlineKeyboardButton(
+            f"🎯 ایکشن: {current_action.capitalize()}",
+            callback_data=f"cycle_mention_action_{gid}"
+        )])
+
+        if current_action == "warn":
+            warn_count = s.get('warn_count', 1)
+            buttons.append([InlineKeyboardButton(
+                f"⚠️ وارننگ کی تعداد: {warn_count}",
+                callback_data=f"cycle_mention_warn_count_{gid}"
+            )])
+
+        buttons.append([InlineKeyboardButton(
+            f"⏰ دورانیہ: {s.get('duration', '30m')}",
+            callback_data=f"change_mention_duration_{gid}"
+        )])
+
     buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
     await query.edit_message_text(
@@ -411,16 +452,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             s = action_settings[gid]["links"]
             s["enabled"] = not s["enabled"]
             group_settings[gid]["block_links"] = s["enabled"]
-
-            if not s["enabled"] and s["action"] == "delete":
-              s["action"] = "mute"
+            # فلٹرنگ آف کرنے پر ایکشن بھی آف کر دو
+            if not s["enabled"]:
+                s["action"] = "off"
             return await show_link_settings(q, gid)
 
         if data.startswith("cycle_link_action_"):
             gid = int(data.rsplit("_",1)[1])
             s = action_settings[gid]["links"]
-            options = ['mute', 'ban', 'warn']
-            s['action'] = options[(options.index(s['action']) + 1) % len(options)]
+            options = ['off', 'mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
+            return await show_link_settings(q, gid)
+
+        if data.startswith("cycle_link_warn_count_"):
+            gid = int(data.rsplit("_",1)[1])
+            s = action_settings[gid]["links"]
+            count = s.get('warn_count', 1)
+            count = 1 if count >= 3 else count + 1
+            s['warn_count'] = count
             return await show_link_settings(q, gid)
 
         if data.startswith("change_link_duration_"):
@@ -432,22 +481,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data.startswith("toggle_link_warn_"):
             gid = int(data.rsplit("_",1)[1])
-            action_settings[gid]["links"]["warn"] = not action_settings[gid]["links"]["warn"]
+            s = action_settings[gid]["links"]
+            s["warn"] = not s.get("warn", False)
             return await show_link_settings(q, gid)
 
+        # فارورڈ سیٹنگز
         if data.startswith("toggle_forward_enabled_"):
             gid = int(data.rsplit("_",1)[1])
-            initialize_group_settings(gid)  # 👈 Add this
+            initialize_group_settings(gid)
             s = action_settings[gid]["forward"]
             s['enabled'] = not s['enabled']
-            group_settings[gid]["block_forwards"] = s["enabled"]  # 👈 safe to access now
+            group_settings[gid]["block_forwards"] = s["enabled"]
+            if not s["enabled"]:
+                s["action"] = "off"
             return await show_forward_settings(q, gid)
 
         if data.startswith("cycle_forward_action_"):
             gid = int(data.rsplit("_",1)[1])
             s = action_settings[gid]["forward"]
-            options = ['mute', 'ban', 'warn']
-            s['action'] = options[(options.index(s['action']) + 1) % len(options)]
+            options = ['off', 'mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
+            return await show_forward_settings(q, gid)
+
+        if data.startswith("cycle_forward_warn_count_"):
+            gid = int(data.rsplit("_",1)[1])
+            s = action_settings[gid]["forward"]
+            count = s.get('warn_count', 1)
+            count = 1 if count >= 3 else count + 1
+            s['warn_count'] = count
             return await show_forward_settings(q, gid)
 
         if data.startswith("change_forward_duration_"):
@@ -459,22 +520,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data.startswith("toggle_forward_warn_"):
             gid = int(data.rsplit("_",1)[1])
-            action_settings[gid]["forward"]["warn"] = not action_settings[gid]["forward"]["warn"]
+            s = action_settings[gid]["forward"]
+            s["warn"] = not s.get("warn", False)
             return await show_forward_settings(q, gid)
 
+        # مینشن سیٹنگز
         if data.startswith("toggle_mention_enabled_"):
             gid = int(data.rsplit("_",1)[1])
-            initialize_group_settings(gid)  # 👈 Add this
+            initialize_group_settings(gid)
             s = action_settings[gid]["mentions"]
             s['enabled'] = not s['enabled']
             group_settings[gid]["block_mentions"] = s["enabled"]
+            if not s["enabled"]:
+                s["action"] = "off"
             return await show_mention_settings(q, gid)
 
         if data.startswith("cycle_mention_action_"):
             gid = int(data.rsplit("_",1)[1])
             s = action_settings[gid]["mentions"]
-            options = ['mute', 'ban', 'warn']
-            s['action'] = options[(options.index(s['action']) + 1) % len(options)]
+            options = ['off', 'mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
+            return await show_mention_settings(q, gid)
+
+        if data.startswith("cycle_mention_warn_count_"):
+            gid = int(data.rsplit("_",1)[1])
+            s = action_settings[gid]["mentions"]
+            count = s.get('warn_count', 1)
+            count = 1 if count >= 3 else count + 1
+            s['warn_count'] = count
             return await show_mention_settings(q, gid)
 
         if data.startswith("change_mention_duration_"):
@@ -486,7 +559,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data.startswith("toggle_mention_warn_"):
             gid = int(data.rsplit("_",1)[1])
-            action_settings[gid]["mentions"]["warn"] = not action_settings[gid]["mentions"]["warn"]
+            s = action_settings[gid]["mentions"]
+            s["warn"] = not s.get("warn", False)
             return await show_mention_settings(q, gid)
 
         await q.answer("❓ نامعلوم بٹن!", show_alert=True)
