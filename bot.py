@@ -94,16 +94,36 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
+
     if chat.type in ["group", "supergroup"]:
         initialize_group_settings(chat.id, chat.type, chat.title, user.id)
         return
+
     keyboard = [
         [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
         [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
         [InlineKeyboardButton("❓ Help", callback_data="help_command")]
     ]
-    message_text = f"👋 Welcome <b>{user.first_name}</b>!\n\nI'm your group management bot. Use the buttons below to begin!"
-    await update.message.reply_html(message_text, reply_markup=InlineKeyboardMarkup(keyboard))
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    message_text = (
+        f"👋 Welcome <b>{user.first_name}</b>!\n\n"
+        "I'm your group management bot. Use the buttons below to begin!"
+    )
+
+    if update.message:
+        await update.message.reply_html(message_text, reply_markup=reply_markup)
+
+    elif update.callback_query:
+        try:
+            await update.callback_query.message.edit_text(
+                text=message_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+        except:
+            await update.callback_query.message.reply_html(message_text, reply_markup=reply_markup)
+
+        await update.callback_query.answer()
 
 # /help
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -809,6 +829,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
     app.add_handler(CommandHandler("settings", settings_command))
+    app.add_handler(CallbackQueryHandler(start, pattern="^force_start$"))
 
     app.add_handler(CallbackQueryHandler(button_handler))
 
