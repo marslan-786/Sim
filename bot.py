@@ -217,15 +217,36 @@ async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandle
 # لنک سیٹنگز سب مینو دکھانا
 async def show_link_settings(query, gid):
     s = action_settings[gid]["links"]
-    buttons = [
-        [InlineKeyboardButton(f"✅ لنک فلٹرنگ: {'آن' if s['enabled'] else 'آف'}", callback_data=f"toggle_links_enabled_{gid}")],
-    ]
+    buttons = []
+
+    # فلٹر آن/آف
+    buttons.append([InlineKeyboardButton(
+        f"✅ لنک فلٹرنگ: {'آن' if s['enabled'] else 'آف'}", 
+        callback_data=f"toggle_links_enabled_{gid}"
+    )])
+
     if s["enabled"]:
-        buttons += [
-            [InlineKeyboardButton(f"🎯 ایکشن: {s['action']}", callback_data=f"cycle_link_action_{gid}")],
-            [InlineKeyboardButton(f"⏰ دورانیہ: {s['duration']}", callback_data=f"change_link_duration_{gid}")],
-            [InlineKeyboardButton(f"⚠️ وارننگ: {'آن' if s['warn'] else 'آف'}", callback_data=f"toggle_link_warn_{gid}")]
-        ]
+        # ایکشن بٹن (mute -> ban -> warn cycle)
+        buttons.append([InlineKeyboardButton(
+            f"🎯 ایکشن: {s['action'].capitalize()}",
+            callback_data=f"cycle_link_action_{gid}"
+        )])
+
+        # اگر ایکشن warn ہو تو وارننگ لیول کا بٹن دکھائیں ورنہ نہیں
+        if s['action'] == "warn":
+            warn_count = s.get('warn_count', 1)
+            buttons.append([InlineKeyboardButton(
+                f"⚠️ وارننگ کی تعداد: {warn_count}",
+                callback_data=f"cycle_link_warn_count_{gid}"
+            )])
+
+        # دورانیہ بٹن
+        buttons.append([InlineKeyboardButton(
+            f"⏰ دورانیہ: {s['duration']}",
+            callback_data=f"change_link_duration_{gid}"
+        )])
+
+    # واپس بٹن
     buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
 
     await query.edit_message_text(
@@ -441,7 +462,7 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"/ban ایرر: {e}")
         await message.reply_text("❌ بین کرنے میں مسئلہ پیش آیا۔")
-        
+
 # /mute ہینڈلر
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -475,7 +496,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"/mute ایرر: {e}")
         await message.reply_text("❌ میوٹ کرنے میں مسئلہ پیش آیا۔")
-
+        
 # /warn ہینڈلر
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
