@@ -413,10 +413,17 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message.reply_to_message:
         return await message.reply_text("🟢 ان بین کرنے کے لیے کسی یوزر کے میسج پر ریپلائی کریں۔")
 
+    target_id = message.reply_to_message.from_user.id
+
     try:
-        target_id = message.reply_to_message.from_user.id
+        member = await context.bot.get_chat_member(chat_id, target_id)
+
+        if member.status != "kicked":
+            return await message.reply_text("ℹ️ یہ یوزر پہلے ہی ان بین ہے یا بین نہیں تھا۔")
+
         await context.bot.unban_chat_member(chat_id, target_id)
         await message.reply_text("✅ یوزر کو ان بین کر دیا گیا۔")
+
     except Exception as e:
         logger.error(f"/unban ایرر: {e}")
         await message.reply_text("❌ ان بین کرنے میں مسئلہ ہوا۔")
@@ -437,15 +444,14 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target_id = message.reply_to_message.from_user.id
 
     try:
-        # یوزر کی موجودہ permissions چیک کریں
         member = await context.bot.get_chat_member(chat_id, target_id)
-        current_perms = member.can_send_messages
 
-        # اگر یوزر پہلے سے unmuted ہے
-        if current_perms:
+        if member.status != "restricted":
+            return await message.reply_text("ℹ️ یہ یوزر میوٹ نہیں ہے۔")
+
+        if member.can_send_messages:
             return await message.reply_text("ℹ️ یہ یوزر پہلے ہی ان میوٹ ہے۔")
 
-        # Full permissions واپس دینا
         full_permissions = ChatPermissions(
             can_send_messages=True,
             can_send_media_messages=True,
