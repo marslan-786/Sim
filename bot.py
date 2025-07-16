@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, MessageEntity
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -9,24 +9,23 @@ from telegram.ext import (
     filters,
 )
 from datetime import datetime, timedelta
-import re
 from typing import Dict, Set, List
 
-# لوگنگ سیٹ اپ
+# Logging setup
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ڈیٹا بیس
+# In-memory data stores
 group_settings: Dict[str, dict] = {}
-user_warnings: Dict[str, dict] = {}
 action_settings: Dict[str, dict] = {}
 user_chats: Dict[int, Dict[str, Set[str]]] = {}
+user_warnings: Dict[str, Dict[int, int]] = {}
 admin_list: Dict[str, List[int]] = {}
 
-# دورانیہ کی تبدیلی کے لیے فنکشنز
+# Duration helpers
 def parse_duration(duration_str: str) -> timedelta:
     durations = {
         '30m': timedelta(minutes=30),
@@ -44,335 +43,407 @@ def format_duration(duration: timedelta) -> str:
     hours = duration.seconds // 3600
     if hours >= 1:
         return f"{hours} گھنٹے"
-    return f"{duration.seconds // 60} منٹ"
+    minutes = (duration.seconds % 3600) // 60
+    if minutes > 0:
+        return f"{minutes} منٹ"
+    return "چند سیکنڈ"
 
-# گروپ سیٹنگز انیشیلائزیشن
+# Initialize group defaults
 def initialize_group_settings(chat_id: str, chat_type: str = "group"):
     if chat_id not in group_settings:
         group_settings[chat_id] = {
             "block_links": False,
             "block_forwards": False,
             "remove_forward_tag": False,
+            "block_mentions": False,
             "allowed_domains": set(),
             "chat_type": chat_type
         }
     if chat_id not in action_settings:
         action_settings[chat_id] = {
-            "links": {
-                "action": "delete",
-                "duration": "1h",
-                "warn": True,
-                "delete": True,
-                "enabled": False
-            },
-            "forward": {
-                "action": "delete",
-                "duration": "1h",
-                "warn": True,
-                "delete": True,
-                "enabled": False
-            }
+            "links": {"action": "delete", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+            "forward": {"action": "delete", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+            "mentions": {"action": "delete", "duration": "1h", "warn": True, "delete": True, "enabled": False}
         }
     if chat_id not in admin_list:
         admin_list[chat_id] = []
+    if chat_id not in user_warnings:
+        user_warnings[chat_id] = {}
 
-# ایڈمن چیک کرنے کا فنکشن
-async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    try:
-        admins = await context.bot.get_chat_administrators(chat_id)
-        return any(admin.user.id == user_id for admin in admins)
-    except Exception as e:
-        logger.error(f"Admin check failed: {e}")
-        return False
-
-# یوزر چاٹس انیشیلائزیشن
+# Track which groups/channels a user has started with the bot
 def initialize_user_chats(user_id: int):
     if user_id not in user_chats:
         user_chats[user_id] = {"groups": set(), "channels": set()}
 
-# بوٹ ہینڈلرز
+# Check admin rights
+async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        admins = await context.bot.get_chat_administrators(chat_id)
+        return any(a.user.id == user_id for a in admins)
+    except Exception as e:
+        logger.error(f"Admin check failed: {e}")
+        return False
+
+# /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     initialize_user_chats(user_id)
-    
+
     if update.message.chat.type == "private":
         keyboard = [
-            [InlineKeyboardButton("➕ گروپ میں شامل کریں", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-            [InlineKeyboardButton("📊 میرے گروپس", callback_data="your_groups")],
-            [InlineKeyboardButton("📢 میرے چینلز", callback_data="your_channels")],
-            [InlineKeyboardButton("❓ مدد", callback_data="help_command")]
+            [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+            [InlineKeyboardButton("📊 My Groups", callback_data="your_groups")],
+            [InlineKeyboardButton("📢 My Channels", callback_data="your_channels")],
+            [InlineKeyboardButton("❓ Help", callback_data="help_command")]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "👋 گروپ مینیجمنٹ بوٹ میں خوش آمدید!\n\n"
-            "🔹 گروپ/چینل میں شامل کریں\n"
-            "🔹 سیٹنگز کو ترتیب دیں\n"
-            "🔹 جدید انتظامی ٹولز",
-            reply_markup=reply_markup
+            "👋 Welcome to Group Management Bot!\n\n"
+            "🔹 Add me to your groups/channels\n"
+            "🔹 Configure settings\n"
+            "🔹 Advanced admin tools",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        chat_id = str(update.message.chat.id)
-        chat_type = "channel" if update.message.chat.type == "channel" else "group"
+        cid = str(update.message.chat.id)
+        ctype = "channel" if update.message.chat.type == "channel" else "group"
         initialize_user_chats(user_id)
-        user_chats[user_id][f"{chat_type}s"].add(chat_id)
-        initialize_group_settings(chat_id, chat_type)
+        user_chats[user_id][f"{ctype}s"].add(cid)
+        initialize_group_settings(cid, ctype)
         await show_help(update, context)
 
-async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """
-🤖 *بوٹ کمانڈز*:
+# /help handler
+async def show_help(update_or_query, context=None):
+    text = """
+🤖 *Bot Commands*:
 
-*ایڈمن کمانڈز*:
-/ban [وقت] - صارف کو بین کریں (جوابی پیغام پر)
-/mute [وقت] - صارف کو میوٹ کریں (جوابی پیغام پر)
-/warn - صارف کو وارننگ دیں (جوابی پیغام پر)
-/unban - صارف کو انبین کریں
-/unmute - صارف کو انمیوٹ کریں
-/settings - سیٹنگز ترتیب دیں
-/allowlink [ڈومین] - ڈومین کی اجازت دیں
-/blocklink [ڈومین] - ڈومین کو بلاک کریں
+*Admin Commands:*
+/ban [duration] – Ban user (reply)
+/mute [duration] – Mute user (reply)
+/warn – Warn user (reply)
+/unban – Unban user
+/unmute – Unmute user
+/settings – Configure settings
+/allowlink [domain] – Allow domain
+/blocklink [domain] – Block domain
 
-مثالیں:
-/ban 1h - 1 گھنٹے کے لیے بین کریں
-/mute 2d - 2 دن کے لیے میوٹ کریں
+Examples:
+/ban 1h – Ban for 1 hour
+/mute 2d – Mute for 2 days
 """
-    if isinstance(update, Update):
-        await update.message.reply_text(help_text, parse_mode="Markdown")
-    else:
-        await update.edit_message_text(help_text, parse_mode="Markdown")
-
-async def group_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.message.chat
-    user = update.effective_user
-    
-    if not await is_admin(chat.id, user.id, context):
-        await update.message.reply_text("⚠️ صرف ایڈمن اس کمانڈ کو استعمال کر سکتے ہیں!")
-        return
-        
-    group_id = str(chat.id)
-    if chat.type == "channel":
-        await show_channel_settings(update, group_id)
-    else:
-        await show_group_settings(update, group_id)
-
-async def show_group_settings(update_or_query, group_id: str):
-    initialize_group_settings(group_id)
-    
-    keyboard = [
-        [InlineKeyboardButton("🔗 لنک سیٹنگز", callback_data=f"link_settings_{group_id}")],
-        [InlineKeyboardButton("↩️ فارورڈ سیٹنگز", callback_data=f"forward_settings_{group_id}")],
-        [InlineKeyboardButton("⚠️ وارننگ سسٹم", callback_data=f"warning_settings_{group_id}")],
-        [InlineKeyboardButton("🔙 واپس", callback_data="your_groups")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    text = "⚙️ *گروپ سیٹنگز*\n\nترتیب دینے کے لیے زمرہ منتخب کریں:"
-    
     if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        await update_or_query.message.reply_text(text, parse_mode="Markdown")
     else:
-        await update_or_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        await update_or_query.edit_message_text(text, parse_mode="Markdown")
 
-async def show_link_settings(query, group_id: str):
-    initialize_group_settings(group_id)
-    settings = action_settings[group_id]["links"]
-    
-    action = settings["action"].capitalize()
-    duration = settings["duration"]
-    warn = "✅" if settings["warn"] else "❌"
-    enabled = "✅" if settings["enabled"] else "❌"
-    
-    keyboard = [
-        [InlineKeyboardButton(f"🔘 فعال: {enabled}", callback_data=f"toggle_links_enabled_{group_id}")],
-        [InlineKeyboardButton(f"⚡ کارروائی: {action}", callback_data=f"cycle_link_action_{group_id}")],
-        [InlineKeyboardButton(f"⏱ دورانیہ: {duration}", callback_data=f"change_link_duration_{group_id}")],
-        [InlineKeyboardButton(f"⚠️ وارننگ: {warn}", callback_data=f"toggle_link_warn_{group_id}")],
-        [InlineKeyboardButton("✏️ اجازت شدہ ڈومینز", callback_data=f"edit_domains_{group_id}")],
-        [InlineKeyboardButton("🔙 واپس", callback_data=f"group_{group_id}")]
-    ]
-    
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(
-        "🔗 *لنک سیٹنگز*\n\nلنکس کو کیسے ہینڈل کیا جائے:",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
-
+# Show the groups user manages
 async def show_user_groups(query):
-    user_id = query.from_user.id
-    initialize_user_chats(user_id)
-    
-    if not user_chats[user_id]["groups"]:
-        keyboard = [[InlineKeyboardButton("🔙 واپس", callback_data="start")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    uid = query.from_user.id
+    initialize_user_chats(uid)
+    groups = user_chats[uid]["groups"]
+
+    if not groups:
+        kb = [[InlineKeyboardButton("🔙 Back", callback_data="start")]]
         await query.edit_message_text(
-            "📊 *میرے گروپس*\n\nآپ نے مجھے کسی گروپ میں شامل نہیں کیا ہے!",
-            reply_markup=reply_markup,
+            "📊 *My Groups*\n\nYou haven't added me anywhere!",
+            reply_markup=InlineKeyboardMarkup(kb),
             parse_mode="Markdown"
         )
         return
-    
-    keyboard = []
-    for group_id in user_chats[user_id]["groups"]:
+
+    kb = []
+    for g in groups:
         try:
-            chat = await query.bot.get_chat(int(group_id))
-            keyboard.append([InlineKeyboardButton(chat.title, callback_data=f"group_{group_id}")])
-        except Exception as e:
-            logger.warning(f"گروپ معلومات حاصل نہیں ہو سکی {group_id}: {e}")
-    
-    keyboard.append([InlineKeyboardButton("🔙 واپس", callback_data="start")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
+            chat = await query.bot.get_chat(int(g))
+            kb.append([InlineKeyboardButton(chat.title, callback_data=f"group_{g}")])
+        except:
+            pass
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
     await query.edit_message_text(
-        "📊 *میرے گروپس*\n\nترتیب دینے کے لیے گروپ منتخب کریں:",
-        reply_markup=reply_markup,
+        "📊 *My Groups*\n\nSelect a group:",
+        reply_markup=InlineKeyboardMarkup(kb),
         parse_mode="Markdown"
     )
 
+# Show the channels user manages
+async def show_user_channels(query):
+    uid = query.from_user.id
+    initialize_user_chats(uid)
+    chans = user_chats[uid]["channels"]
+
+    if not chans:
+        kb = [[InlineKeyboardButton("🔙 Back", callback_data="start")]]
+        await query.edit_message_text(
+            "📢 *My Channels*\n\nYou haven't added me to any channel!",
+            reply_markup=InlineKeyboardMarkup(kb),
+            parse_mode="Markdown"
+        )
+        return
+
+    kb = []
+    for c in chans:
+        try:
+            chat = await query.bot.get_chat(int(c))
+            kb.append([InlineKeyboardButton(chat.title, callback_data=f"channel_{c}")])
+        except:
+            pass
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
+    await query.edit_message_text(
+        "📢 *My Channels*\n\nSelect a channel:",
+        reply_markup=InlineKeyboardMarkup(kb),
+        parse_mode="Markdown"
+    )
+
+# Show settings menu for a group
+async def show_group_settings(update_or_query, gid: str):
+    initialize_group_settings(gid)
+    kb = [
+        [InlineKeyboardButton("🔗 Link Settings", callback_data=f"link_settings_{gid}")],
+        [InlineKeyboardButton("↩️ Forward Settings", callback_data=f"forward_settings_{gid}")],
+        [InlineKeyboardButton("🗣 Mention Settings", callback_data=f"mention_settings_{gid}")],
+        [InlineKeyboardButton("🔙 Back", callback_data="your_groups")]
+    ]
+    text = f"⚙️ *Settings for* `{gid}`\nSelect category:"
+    if isinstance(update_or_query, Update):
+        await update_or_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+    else:
+        await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+
+# Show link settings submenu
+async def show_link_settings(query, gid: str):
+    s = action_settings[gid]["links"]
+    kb = [
+        [InlineKeyboardButton(f"Enabled: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_links_enabled_{gid}")],
+        [InlineKeyboardButton(f"Action: {s['action']}", callback_data=f"cycle_link_action_{gid}")],
+        [InlineKeyboardButton(f"Duration: {s['duration']}", callback_data=f"change_link_duration_{gid}")],
+        [InlineKeyboardButton(f"Warn: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_link_warn_{gid}")],
+        [InlineKeyboardButton("🔙 Back", callback_data=f"group_{gid}")]
+    ]
+    await query.edit_message_text("🔗 *Link Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+
+# Show forward settings submenu
+async def show_forward_settings(query, gid: str):
+    s = action_settings[gid]["forward"]
+    kb = [
+        [InlineKeyboardButton(f"Enabled: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_forward_enabled_{gid}")],
+        [InlineKeyboardButton(f"Action: {s['action']}", callback_data=f"cycle_forward_action_{gid}")],
+        [InlineKeyboardButton(f"Duration: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
+        [InlineKeyboardButton(f"Warn: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_forward_warn_{gid}")],
+        [InlineKeyboardButton("🔙 Back", callback_data=f"group_{gid}")]
+    ]
+    await query.edit_message_text("↩️ *Forward Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+
+# Show mention settings submenu
+async def show_mention_settings(query, gid: str):
+    s = action_settings[gid]["mentions"]
+    kb = [
+        [InlineKeyboardButton(f"Enabled: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_mention_enabled_{gid}")],
+        [InlineKeyboardButton(f"Action: {s['action']}", callback_data=f"cycle_mention_action_{gid}")],
+        [InlineKeyboardButton(f"Duration: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
+        [InlineKeyboardButton(f"Warn: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_mention_warn_{gid}")],
+        [InlineKeyboardButton("🔙 Back", callback_data=f"group_{gid}")]
+    ]
+    await query.edit_message_text("🗣 *Mention Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+
+# Handle all callback queries
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    
+    q = update.callback_query
+    data = q.data
+    uid = q.from_user.id
+    await q.answer()
+
     try:
         if data == "start":
-            await start(update, context)
-        elif data == "your_groups":
-            await show_user_groups(query)
-        elif data == "your_channels":
-            await show_user_channels(query)
-        elif data == "help_command":
-            await show_help(query, context)
-        elif data.startswith("group_"):
-            group_id = data.split("_")[1]
-            if await is_admin(int(group_id), query.from_user.id, context):
-                await show_group_settings(query, group_id)
-            else:
-                await query.answer("⚠️ صرف ایڈمن یہ سیٹنگز دیکھ سکتے ہیں!", show_alert=True)
-        elif data.startswith("toggle_links_enabled_"):
-            group_id = data.split("_")[3]
-            if await is_admin(int(group_id), query.from_user.id, context):
-                action_settings[group_id]["links"]["enabled"] = not action_settings[group_id]["links"]["enabled"]
-                await show_link_settings(query, group_id)
-            else:
-                await query.answer("⚠️ صرف ایڈمن یہ تبدیلی کر سکتے ہیں!", show_alert=True)
-        elif data.startswith("cycle_link_action_"):
-            group_id = data.split("_")[3]
-            if await is_admin(int(group_id), query.from_user.id, context):
-                actions = ["delete", "mute", "ban"]
-                current = action_settings[group_id]["links"]["action"]
-                next_action = actions[(actions.index(current) + 1) % len(actions)]
-                action_settings[group_id]["links"]["action"] = next_action
-                await show_link_settings(query, group_id)
-            else:
-                await query.answer("⚠️ صرف ایڈمن یہ تبدیلی کر سکتے ہیں!", show_alert=True)
-        elif data.startswith("change_link_duration_"):
-            group_id = data.split("_")[3]
-            if await is_admin(int(group_id), query.from_user.id, context):
-                durations = ["30m", "1h", "6h", "1d", "3d", "7d"]
-                current = action_settings[group_id]["links"]["duration"]
-                next_duration = durations[(durations.index(current) + 1) % len(durations)]
-                action_settings[group_id]["links"]["duration"] = next_duration
-                await show_link_settings(query, group_id)
-            else:
-                await query.answer("⚠️ صرف ایڈمن یہ تبدیلی کر سکتے ہیں!", show_alert=True)
-        elif data == "back":
-            await start(update, context)
-    except Exception as e:
-        logger.error(f"بٹن ہینڈلر میں خرابی: {e}")
-        await query.edit_message_text("❌ ایک خرابی پیش آئی۔ براہ کرم دوبارہ کوشش کریں۔")
+            return await start(update, context)
+        if data == "your_groups":
+            return await show_user_groups(q)
+        if data == "your_channels":
+            return await show_user_channels(q)
+        if data == "help_command":
+            return await show_help(q, context)
+        if data.startswith("group_"):
+            gid = data.split("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                return await show_group_settings(q, gid)
+            return await q.answer("⚠️ Only admins!", show_alert=True)
 
+        # Link toggles and cycles
+        if data.startswith("toggle_links_enabled_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                action_settings[gid]["links"]["enabled"] ^= True
+                return await show_link_settings(q, gid)
+        if data.startswith("cycle_link_action_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                opts = ["delete","mute","ban"]
+                cur = action_settings[gid]["links"]["action"]
+                action_settings[gid]["links"]["action"] = opts[(opts.index(cur)+1)%3]
+                return await show_link_settings(q, gid)
+        if data.startswith("change_link_duration_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                opts = ["30m","1h","6h","1d","3d","7d"]
+                cur = action_settings[gid]["links"]["duration"]
+                action_settings[gid]["links"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
+                return await show_link_settings(q, gid)
+        if data.startswith("toggle_link_warn_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                action_settings[gid]["links"]["warn"] ^= True
+                return await show_link_settings(q, gid)
+
+        # Forward toggles and cycles
+        if data.startswith("toggle_forward_enabled_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                action_settings[gid]["forward"]["enabled"] ^= True
+                return await show_forward_settings(q, gid)
+        if data.startswith("cycle_forward_action_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                opts = ["delete","mute","ban"]
+                cur = action_settings[gid]["forward"]["action"]
+                action_settings[gid]["forward"]["action"] = opts[(opts.index(cur)+1)%3]
+                return await show_forward_settings(q, gid)
+        if data.startswith("change_forward_duration_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                opts = ["30m","1h","6h","1d","3d","7d"]
+                cur = action_settings[gid]["forward"]["duration"]
+                action_settings[gid]["forward"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
+                return await show_forward_settings(q, gid)
+        if data.startswith("toggle_forward_warn_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                action_settings[gid]["forward"]["warn"] ^= True
+                return await show_forward_settings(q, gid)
+
+        # Mention toggles and cycles
+        if data.startswith("toggle_mention_enabled_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                action_settings[gid]["mentions"]["enabled"] ^= True
+                return await show_mention_settings(q, gid)
+        if data.startswith("cycle_mention_action_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                opts = ["delete","mute","ban"]
+                cur = action_settings[gid]["mentions"]["action"]
+                action_settings[gid]["mentions"]["action"] = opts[(opts.index(cur)+1)%3]
+                return await show_mention_settings(q, gid)
+        if data.startswith("change_mention_duration_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                opts = ["30m","1h","6h","1d","3d","7d"]
+                cur = action_settings[gid]["mentions"]["duration"]
+                action_settings[gid]["mentions"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
+                return await show_mention_settings(q, gid)
+        if data.startswith("toggle_mention_warn_"):
+            gid = data.rsplit("_",1)[1]
+            if await is_admin(int(gid), uid, context):
+                action_settings[gid]["mentions"]["warn"] ^= True
+                return await show_mention_settings(q, gid)
+
+        # Navigation
+        if data == "back":
+            return await start(update, context)
+
+        await q.answer("Unknown button!", show_alert=True)
+    except Exception as e:
+        logger.error(f"Callback error: {e}")
+        await q.edit_message_text("❌ Error occurred. Try again.")
+
+# Message filter (links, forwards, mentions)
 async def message_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
-        
-    message = update.message
-    chat_id = str(message.chat.id)
-    chat_type = "channel" if message.chat.type == "channel" else "group"
-    initialize_group_settings(chat_id, chat_type)
-    
-    # چینل کے لیے خاص ہینڈلنگ
-    if chat_type == "channel":
-        if group_settings[chat_id]["remove_forward_tag"] and message.forward_from_chat:
-            try:
-                await message.edit_forward_sender_name(None)
-            except Exception as e:
-                logger.warning(f"فارورڈ ٹیگ ہٹانے میں ناکامی: {e}")
-        return
-    
-    # گروپ ہینڈلنگ
-    if message.forward_date and group_settings[chat_id]["block_forwards"]:
-        await handle_violation(update, context, "forward")
-        return
-    
-    if group_settings[chat_id]["block_links"]:
-        entities = message.entities or []
-        text = message.text or ""
-        for entity in entities:
-            if entity.type in ["url", "text_link"]:
-                url = text[entity.offset:entity.offset + entity.length] if entity.type == "url" else entity.url
-                if not any(domain in url for domain in group_settings[chat_id]["allowed_domains"]):
-                    await handle_violation(update, context, "links")
-                    break
+    msg = update.message
+    cid = str(msg.chat.id)
+    ctype = "channel" if msg.chat.type=="channel" else "group"
+    initialize_group_settings(cid, ctype)
 
-async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, violation_type: str):
-    message = update.message
-    chat_id = str(message.chat.id)
-    user_id = message.from_user.id
-    actions = action_settings.get(chat_id, {}).get(violation_type, {})
-    
-    if not actions.get("enabled", False):
+    # Channel: remove forward tag
+    if ctype=="channel" and group_settings[cid]["remove_forward_tag"] and msg.forward_from_chat:
+        try:
+            await msg.edit_forward_sender_name(None)
+        except: pass
         return
-    
-    try:
-        if actions.get("delete", True):
-            await message.delete()
-    except Exception as e:
-        logger.warning(f"پیغام ڈیلیٹ کرنے میں ناکامی: {e}")
-    
-    if actions.get("warn", True):
+
+    # Forward block
+    if msg.forward_date and group_settings[cid]["block_forwards"]:
+        return await handle_violation(update, context, "forward")
+
+    # Link block
+    if group_settings[cid]["block_links"] and msg.entities:
+        for ent in msg.entities:
+            if ent.type in ("url","text_link"):
+                url = msg.text[ent.offset:ent.offset+ent.length] if ent.type=="url" else ent.url
+                if not group_settings[cid]["allowed_domains"] or not any(d in url for d in group_settings[cid]["allowed_domains"]):
+                    return await handle_violation(update, context, "links")
+
+    # Mention block
+    if group_settings[cid]["block_mentions"] and msg.entities:
+        for ent in msg.entities:
+            if ent.type in (MessageEntity.MENTION, MessageEntity.TEXT_MENTION):
+                return await handle_violation(update, context, "mentions")
+
+# Handle violations
+async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, vt: str):
+    msg = update.message
+    cid = str(msg.chat.id)
+    uid = msg.from_user.id
+    act = action_settings[cid][vt]
+    if not act["enabled"]:
+        return
+
+    if act["delete"]:
+        try: await msg.delete()
+        except: pass
+    if act["warn"]:
         await warn_user(update, context)
-    
-    action = actions.get("action", "delete")
-    duration = parse_duration(actions.get("duration", "1h"))
-    
-    try:
-        if action == "mute":
-            until_date = datetime.now() + duration
-            await context.bot.restrict_chat_member(
-                chat_id=int(chat_id),
-                user_id=user_id,
-                permissions=ChatPermissions(can_send_messages=False),
-                until_date=until_date
-            )
-            await context.bot.send_message(
-                chat_id=int(chat_id),
-                text=f"🔇 صارف کو {format_duration(duration)} کے لیے میوٹ کر دیا گیا"
-            )
-        elif action == "ban":
-            until_date = datetime.now() + duration
-            await context.bot.ban_chat_member(
-                chat_id=int(chat_id),
-                user_id=user_id,
-                until_date=until_date
-            )
-            await context.bot.send_message(
-                chat_id=int(chat_id),
-                text=f"🚫 صارف کو {format_duration(duration)} کے لیے بین کر دیا گیا"
-            )
-    except Exception as e:
-        logger.error(f"کارروائی {action} کرنے میں ناکامی: {e}")
 
-# بوٹ چلانے کا حصہ
+    action = act["action"]
+    until = datetime.utcnow() + parse_duration(act["duration"])
+    try:
+        if action=="mute":
+            await context.bot.restrict_chat_member(int(cid), uid, ChatPermissions(can_send_messages=False), until_date=until)
+            await context.bot.send_message(int(cid), f"🔇 Muted for {format_duration(parse_duration(act['duration']))}")
+        if action=="ban":
+            await context.bot.ban_chat_member(int(cid), uid, until_date=until)
+            await context.bot.send_message(int(cid), f"🚫 Banned for {format_duration(parse_duration(act['duration']))}")
+    except Exception as e:
+        logger.error(f"Violation action failed: {e}")
+
+# Warn user
+async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    cid = str(msg.chat.id)
+    uid = msg.from_user.id
+    user_warnings[cid].setdefault(uid, 0)
+    user_warnings[cid][uid] += 1
+    warns = user_warnings[cid][uid]
+    if warns>=3:
+        # 3 warnings => 1h mute
+        until = datetime.utcnow() + timedelta(hours=1)
+        try:
+            await context.bot.restrict_chat_member(int(cid), uid, ChatPermissions(can_send_messages=False), until_date=until)
+            await context.bot.send_message(int(cid), f"⚠️ Muted 1h after 3 warns")
+            user_warnings[cid][uid] = 0
+        except:
+            pass
+    else:
+        await context.bot.send_message(int(cid), f"⚠️ Warning {warns}/3")
+
+# Main
 if __name__ == "__main__":
     TOKEN = "7735984673:AAGEhbsdIfO-j8B3DvBwBW9JSb9BcPd_J6o"
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # ہینڈلرز شامل کریں
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", show_help))
-    app.add_handler(CommandHandler("settings", group_settings_command))
-    app.add_handler(MessageHandler(filters.ALL, message_filter))
+    app.add_handler(CommandHandler("settings", show_help))  # you can map to group_settings_command if needed
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.ALL, message_filter))
 
-    print("🤖 بوٹ چل رہا ہے...")
+    print("🤖 Bot is running...")
     app.run_polling()
