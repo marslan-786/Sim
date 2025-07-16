@@ -229,8 +229,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 switch_inline_query_current_chat="/start"
             )]]
             await q.edit_message_text(
-                "مینو پر واپس جانے کے لیے نیچے دیے گئے بٹن پر کلک کریں:",)
+                "مینو پر واپس جانے کے لیے نیچے دیے گئے بٹن پر کلک کریں:",
                 reply_markup=InlineKeyboardMarkup(keyboard)
+                )
             return
         if data == "your_groups":
             return await show_user_groups(q)
