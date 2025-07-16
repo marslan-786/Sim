@@ -132,13 +132,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     chat = update.effective_chat
 
-    # If in group, store group info
+    # If the bot is added in a group
     if chat.type in ["group", "supergroup"]:
         initialize_group_settings(chat.id, chat.type)
         user_chats.setdefault(user.id, {}).setdefault("groups", set()).add(chat.id)
         return
 
-    # Private chat menu
+    # Private chat (or forced start from menu)
     keyboard = [
         [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
         [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
@@ -147,20 +147,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Reply depending on context
+    message_text = (
+        f"👋 Welcome <b>{user.first_name}</b>!\n\n"
+        "I'm your group management bot. Use the buttons below to begin!"
+    )
+
     if update.message:
-        await update.message.reply_html(
-            f"👋 Welcome <b>{user.first_name}</b>!\n\n"
-            "I'm your group management bot. Use the buttons below to begin!",
-            reply_markup=reply_markup
-        )
+        await update.message.reply_html(message_text, reply_markup=reply_markup)
+
     elif update.callback_query:
-        await update.callback_query.message.edit_text(
-            f"👋 Welcome <b>{user.first_name}</b>!\n\n"
-            "I'm your group management bot. Use the buttons below to begin!",
-            reply_markup=reply_markup,
-            parse_mode="HTML"
-        )
+        try:
+            await update.callback_query.message.edit_text(
+                text=message_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML"
+            )
+        except:
+            # If the message was deleted or can't be edited
+            await update.callback_query.message.reply_html(message_text, reply_markup=reply_markup)
+
+    # Acknowledge the callback (removes loading animation)
+    if update.callback_query:
+        await update.callback_query.answer()
 
 # /help handler
 async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
