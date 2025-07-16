@@ -320,30 +320,48 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
 # /ban ہینڈلر
 async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("⛔ اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
+    message = update.message
+    chat_id = message.chat.id
+    user_id = message.from_user.id
 
-    target = update.message.reply_to_message.from_user
-    chat_id = update.effective_chat.id
+    # ایڈمن چیک
+    if not await is_admin(chat_id, user_id, context):
+        await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+        return
 
-    # مدت حاصل کریں
+    # ریپلائی چیک
+    if not message.reply_to_message:
+        return await message.reply_text("⛔ اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
+
+    target = message.reply_to_message.from_user
+
+    # بین کی مدت
     duration_str = context.args[0] if context.args else "1h"
     until_date = datetime.utcnow() + parse_duration(duration_str)
 
     try:
         await context.bot.ban_chat_member(chat_id, target.id, until_date=until_date)
-        await update.message.reply_text(f"🚫 {target.mention_html()} کو {format_duration(parse_duration(duration_str))} کے لیے بین کر دیا گیا۔", parse_mode="HTML")
+        await message.reply_html(
+            f"🚫 {target.mention_html()} کو {format_duration(parse_duration(duration_str))} کے لیے بین کر دیا گیا۔"
+        )
     except Exception as e:
         logger.error(f"/ban ایرر: {e}")
-        await update.message.reply_text("❌ بین کرنے میں مسئلہ پیش آیا۔")
+        await message.reply_text("❌ بین کرنے میں مسئلہ پیش آیا۔")
         
 # /mute ہینڈلر
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("🔇 اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
+    message = update.message
+    chat_id = message.chat.id
+    user_id = message.from_user.id
 
-    target = update.message.reply_to_message.from_user
-    chat_id = update.effective_chat.id
+    if not await is_admin(chat_id, user_id, context):
+        await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+        return
+
+    if not message.reply_to_message:
+        return await message.reply_text("🔇 اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
+
+    target = message.reply_to_message.from_user
     duration_str = context.args[0] if context.args else "1h"
     until_date = datetime.utcnow() + parse_duration(duration_str)
 
@@ -351,64 +369,89 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await context.bot.restrict_chat_member(chat_id, target.id, permissions=permissions, until_date=until_date)
-        await update.message.reply_text(f"🔇 {target.mention_html()} کو {format_duration(parse_duration(duration_str))} کے لیے میوٹ کر دیا گیا۔", parse_mode="HTML")
+        await message.reply_html(f"🔇 {target.mention_html()} کو {format_duration(parse_duration(duration_str))} کے لیے میوٹ کر دیا گیا۔")
     except Exception as e:
         logger.error(f"/mute ایرر: {e}")
-        await update.message.reply_text("❌ میوٹ کرنے میں مسئلہ پیش آیا۔")
+        await message.reply_text("❌ میوٹ کرنے میں مسئلہ پیش آیا۔")
         
 # /warn ہینڈلر
 async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("⚠️ اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
+    message = update.message
+    chat_id = message.chat.id
+    user_id = message.from_user.id
 
-    user_id = update.message.reply_to_message.from_user.id
-    chat_id = update.effective_chat.id
+    if not await is_admin(chat_id, user_id, context):
+        await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+        return
+
+    if not message.reply_to_message:
+        return await message.reply_text("⚠️ اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
+
+    target_id = message.reply_to_message.from_user.id
     initialize_group_settings(chat_id)
-    user_warnings[chat_id][user_id] = user_warnings[chat_id].get(user_id, 0) + 1
 
-    count = user_warnings[chat_id][user_id]
-    await update.message.reply_text(f"⚠️ وارننگ {count}/3 دے دی گئی۔")
+    user_warnings[chat_id][target_id] = user_warnings[chat_id].get(target_id, 0) + 1
+    count = user_warnings[chat_id][target_id]
+
+    await message.reply_text(f"⚠️ وارننگ {count}/3 دے دی گئی۔")
 
     if count >= 3:
-        await context.bot.ban_chat_member(chat_id, user_id, until_date=datetime.utcnow() + timedelta(hours=1))
-        user_warnings[chat_id][user_id] = 0
-        await update.message.reply_text("🚫 حد سے زیادہ وارننگز۔ 1 گھنٹے کے لیے بین کر دیا گیا۔")
+        await context.bot.ban_chat_member(chat_id, target_id, until_date=datetime.utcnow() + timedelta(hours=1))
+        user_warnings[chat_id][target_id] = 0
+        await message.reply_text("🚫 حد سے زیادہ وارننگز۔ 1 گھنٹے کے لیے بین کر دیا گیا۔")
         
 # /unban ہینڈلر
 async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("🟢 ان بین کرنے کے لیے کسی یوزر کے میسج پر ریپلائی کریں۔")
+    message = update.message
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+
+    if not await is_admin(chat_id, user_id, context):
+        await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+        return
+
+    if not message.reply_to_message:
+        return await message.reply_text("🟢 ان بین کرنے کے لیے کسی یوزر کے میسج پر ریپلائی کریں۔")
+
     try:
-        user_id = update.message.reply_to_message.from_user.id
-        chat_id = update.effective_chat.id
-        await context.bot.unban_chat_member(chat_id, user_id)
-        await update.message.reply_text("✅ یوزر کو ان بین کر دیا گیا۔")
+        target_id = message.reply_to_message.from_user.id
+        await context.bot.unban_chat_member(chat_id, target_id)
+        await message.reply_text("✅ یوزر کو ان بین کر دیا گیا۔")
     except Exception as e:
         logger.error(f"/unban ایرر: {e}")
-        await update.message.reply_text("❌ ان بین کرنے میں مسئلہ ہوا۔")
+        await message.reply_text("❌ ان بین کرنے میں مسئلہ ہوا۔")
 
 # /unmute ہینڈلر
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("🟢 ان میوٹ کرنے کے لیے کسی میسج پر ریپلائی کریں۔")
+    message = update.message
+    chat = message.chat
+    user_id = message.from_user.id
+    chat_id = chat.id
+
+    if not await is_admin(chat_id, user_id, context):
+        await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+        return
+
+    if not message.reply_to_message:
+        await message.reply_text("⚠️ براہ کرم اس یوزر پر ریپلائی کریں جسے ان میوٹ کرنا ہے۔")
+        return
+
+    target_user = message.reply_to_message.from_user.id
+
     try:
-        user_id = update.message.reply_to_message.from_user.id
-        chat_id = update.effective_chat.id
-        permissions = ChatPermissions(
-            can_send_messages=True,
-            can_send_media_messages=True,
-            can_send_polls=True,
-            can_send_other_messages=True,
-            can_add_web_page_previews=True,
-            can_change_info=False,
-            can_invite_users=True,
-            can_pin_messages=False
+        await context.bot.restrict_chat_member(
+            chat_id,
+            target_user,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True
+            )
         )
-        await context.bot.restrict_chat_member(chat_id, user_id, permissions=permissions)
-        await update.message.reply_text("✅ یوزر کو ان میوٹ کر دیا گیا۔")
+        await message.reply_text("🔊 یوزر کو ان میوٹ کر دیا گیا ہے۔")
     except Exception as e:
-        logger.error(f"/unmute ایرر: {e}")
-        await update.message.reply_text("❌ ان میوٹ کرنے میں مسئلہ ہوا۔")
+        await message.reply_text("❌ ان میوٹ کرنے میں مسئلہ آیا!")
         
 # /settings کمانڈ ہینڈلر - صرف گروپ چیٹس کے لیے
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -416,6 +459,10 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = message.chat
     user_id = message.from_user.id
     chat_id = chat.id
+    
+    if not await is_admin(chat_id, user_id, context):
+        await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+        return
 
     if chat.type not in ["group", "supergroup"]:
         await message.reply_text("⚙️ یہ کمانڈ صرف گروپ چیٹس میں دستیاب ہے۔")
