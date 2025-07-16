@@ -129,17 +129,16 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
 # Track user's groups/channels
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
     user = update.effective_user
+    chat = update.effective_chat
 
-    # If message is from a group, save group info
+    # If in group, store group info
     if chat.type in ["group", "supergroup"]:
         initialize_group_settings(chat.id, chat.type)
         user_chats.setdefault(user.id, {}).setdefault("groups", set()).add(chat.id)
-        print(f"[START] Added group {chat.id} to user {user.id}")
         return
 
-    # If message is from private chat, show start menu
+    # Private chat menu
     keyboard = [
         [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
         [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
@@ -147,11 +146,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("❓ Help", callback_data="help_command")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_html(
-        f"👋 Welcome <b>{user.first_name}</b>!\n\n"
-        "I'm your group management bot. Use the buttons below to begin!",
-        reply_markup=reply_markup
-    )
+
+    # Reply depending on context
+    if update.message:
+        await update.message.reply_html(
+            f"👋 Welcome <b>{user.first_name}</b>!\n\n"
+            "I'm your group management bot. Use the buttons below to begin!",
+            reply_markup=reply_markup
+        )
+    elif update.callback_query:
+        await update.callback_query.message.edit_text(
+            f"👋 Welcome <b>{user.first_name}</b>!\n\n"
+            "I'm your group management bot. Use the buttons below to begin!",
+            reply_markup=reply_markup,
+            parse_mode="HTML"
+        )
 
 # /help handler
 async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
@@ -181,7 +190,10 @@ async def show_user_groups(query):
     groups = user_chats.get(user_id, {}).get("groups", set())
 
     if not groups:
-        await query.edit_message_text("😕 آپ نے ابھی تک اس بوٹ کو کسی بھی گروپ میں ایڈ نہیں کیا۔\n\n🔄 براہ کرم بوٹ کو اپنے گروپ میں ایڈ کریں اور پھر /start دبائیں۔")
+        await query.edit_message_text(
+            "😕 You haven't added this bot to any group yet.\n\n"
+            "🔄 Please add the bot to your group and then use /start in that group."
+        )
         return
 
     kb = []
@@ -189,40 +201,41 @@ async def show_user_groups(query):
         title = group_settings.get(gid, {}).get("title", f"Group {gid}")
         kb.append([InlineKeyboardButton(f"📛 {title}", callback_data=f"group_{gid}")])
 
-    kb.append([InlineKeyboardButton("🏠 مین مینو", callback_data="force_start")])
-    await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
+    kb.append([InlineKeyboardButton("🏠 Main Menu", callback_data="force_start")])
+    await query.edit_message_text("📊 Your Groups:", reply_markup=InlineKeyboardMarkup(kb))
 
 # Show user's channels as buttons
 async def toggle_forward_removal(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
 
-    # اگر یوزر کا سیٹنگ نہ ہو تو ڈیفالٹ سیٹ کریں
+    # Initialize default setting if not set
     if user_id not in channel_forward_settings:
         channel_forward_settings[user_id] = {"remove_forward_tag": False}
 
-    # موجودہ اسٹیٹ حاصل کریں
+    # Get current state
     current_state = channel_forward_settings[user_id]["remove_forward_tag"]
 
-    # اسٹیٹ کو ٹوگل کریں
+    # Toggle the state
     channel_forward_settings[user_id]["remove_forward_tag"] = not current_state
 
-    # نیا اسٹیٹ حاصل کریں
+    # Get the new state
     new_state = channel_forward_settings[user_id]["remove_forward_tag"]
     status = "✅ ON" if new_state else "❌ OFF"
     toggle_text = f"🔁 Forward Tag Removal: {status}"
 
+    # Build keyboard
     keyboard = [
         [InlineKeyboardButton(toggle_text, callback_data="toggle_forward_removal")],
         [InlineKeyboardButton("🏠 Main Menu", callback_data="force_start")]
     ]
 
-    # میسج کو اپڈیٹ کریں
+    # Update the message
     await query.edit_message_text(
         text="📢 Channel Settings:\n\nChoose what to do with forwarded messages:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    # کال بیک کو اَکناولج کریں تاکہ "loading..." ریمو ہو جائے
+    # Acknowledge callback to remove "loading..." popup
     await query.answer()
     
 async def global_channel_settings(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
