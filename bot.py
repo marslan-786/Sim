@@ -105,7 +105,7 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
           "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
           "forward": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
           "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-          "custom": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False}
+          "custom": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
           "custom": {
           "enabled": False,
           "action": "off",       # 'off', 'mute', 'ban', 'warn'
