@@ -145,7 +145,7 @@ async def show_user_groups(query):
     kb = []
     for gid in groups:
         kb.append([InlineKeyboardButton(f"گروپ: {gid}", callback_data=f"group_{gid}")])
-    kb.append([InlineKeyboardButton("🏠 مینو", callback_data="start")])  # تبدیل شدہ
+    kb.append([InlineKeyboardButton("🏠 مینو", callback_data="force_start")])
     await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
 
 async def show_user_channels(query):
@@ -158,7 +158,7 @@ async def show_user_channels(query):
     kb = []
     for cid in channels:
         kb.append([InlineKeyboardButton(f"چینل: {cid}", callback_data=f"group_{cid}")])
-    kb.append([InlineKeyboardButton("🏠 مینو", callback_data="start")])  # تبدیل شدہ
+    kb.append([InlineKeyboardButton("🏠 مینو", callback_data="force_start")])
     await query.edit_message_text("📢 آپ کے چینلز:", reply_markup=InlineKeyboardMarkup(kb))
     
     
@@ -223,16 +223,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if data == "force_start":
-            # یوزر کی طرف سے /start بھیجنے کا بٹن
-            keyboard = [[InlineKeyboardButton(
-                "🔄 مینو ری لوڈ کریں", 
-                switch_inline_query_current_chat="/start"
-            )]]
-            await q.edit_message_text(
-                "مینو پر واپس جانے کے لیے نیچے دیے گئے بٹن پر کلک کریں:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            return
+    return await start(update, context)
         if data == "your_groups":
             return await show_user_groups(q)
         if data == "your_channels":
