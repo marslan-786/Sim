@@ -306,6 +306,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return await show_group_settings(q, gid)
             return await q.answer("⚠️ صرف ایڈمنز کے لیے!", show_alert=True)
 
+        # لنک سیٹنگز دکھائیں
+        if data.startswith("link_settings_"):
+            gid = int(data.rsplit("_",1)[1])
+            return await show_link_settings(q, gid)
+
+        # فارورڈ سیٹنگز دکھائیں
+        if data.startswith("forward_settings_"):
+            gid = int(data.rsplit("_",1)[1])
+            return await show_forward_settings(q, gid)
+
+        # مینشن سیٹنگز دکھائیں
+        if data.startswith("mention_settings_"):
+            gid = int(data.rsplit("_",1)[1])
+            return await show_mention_settings(q, gid)
+
         # 🔗 لنک سیٹنگز
         if data.startswith("toggle_links_enabled_"):
             gid = int(data.rsplit("_",1)[1])
