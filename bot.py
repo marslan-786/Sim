@@ -435,4 +435,4 @@ class UltimateGroupBot:
         query.edit_message_text("📢 *Your Channels*\n\nSelect a channel to configure:", reply_markup=reply_markup, parse_mode="Markdown")
 
 if __name__ == '__main__':
-    TOKEN = "8017193630:AAFaMRpJ7Hk-2MTibaWOR_71-NYuFgr_2_U
+    TOKEN = "8017193630:AAFaMRpJ7Hk-2MTibaWOR_71-NYuFgr_2_U"
