@@ -681,6 +681,91 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Callback Error: {e}")
         await q.edit_message_text("❌ Something went wrong, please try again.")
+        
+# ✅ Check admin
+async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        member = await context.bot.get_chat_member(chat_id, user_id)
+        return member.status in ["administrator", "creator"]
+    except:
+        return False
+
+# ✅ Ban command
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat_id = message.chat_id
+    user_id = message.from_user.id
+
+    if not await is_admin(chat_id, user_id, context):
+        return await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+
+    if not message.reply_to_message:
+        return await message.reply_text("⛔ اس کمانڈ کو استعمال کرنے کے لیے کسی یوزر کو ریپلائی کریں۔")
+
+    target_id = message.reply_to_message.from_user.id
+    duration = parse_duration(" ".join(context.args) if context.args else "1h")
+    until_date = datetime.utcnow() + duration
+
+    await context.bot.ban_chat_member(chat_id, target_id, until_date=until_date)
+    await message.reply_text(f"🚫 یوزر کو {format_duration(duration)} کے لیے بین کر دیا گیا۔")
+
+# ✅ Mute command
+async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat_id = message.chat_id
+    user_id = message.from_user.id
+
+    if not await is_admin(chat_id, user_id, context):
+        return await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+
+    if not message.reply_to_message:
+        return await message.reply_text("⛔ اس کمانڈ کو استعمال کرنے کے لیے کسی یوزر کو ریپلائی کریں۔")
+
+    target_id = message.reply_to_message.from_user.id
+    duration = parse_duration(" ".join(context.args) if context.args else "1h")
+    until_date = datetime.utcnow() + duration
+
+    permissions = ChatPermissions(can_send_messages=False)
+    await context.bot.restrict_chat_member(chat_id, target_id, permissions=permissions, until_date=until_date)
+    await message.reply_text(f"🔇 یوزر کو {format_duration(duration)} کے لیے mute کر دیا گیا۔")
+
+# ✅ Unban command
+async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat_id = message.chat_id
+    user_id = message.from_user.id
+
+    if not await is_admin(chat_id, user_id, context):
+        return await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+
+    if not message.reply_to_message:
+        return await message.reply_text("⛔ اس کمانڈ کو استعمال کرنے کے لیے کسی یوزر کو ریپلائی کریں۔")
+
+    target_id = message.reply_to_message.from_user.id
+    await context.bot.unban_chat_member(chat_id, target_id)
+    await message.reply_text("✅ یوزر کو unban کر دیا گیا۔")
+
+# ✅ Unmute command
+async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat_id = message.chat_id
+    user_id = message.from_user.id
+
+    if not await is_admin(chat_id, user_id, context):
+        return await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
+
+    if not message.reply_to_message:
+        return await message.reply_text("⛔ اس کمانڈ کو استعمال کرنے کے لیے کسی یوزر کو ریپلائی کریں۔")
+
+    target_id = message.reply_to_message.from_user.id
+    permissions = ChatPermissions(
+        can_send_messages=True,
+        can_send_media_messages=True,
+        can_send_other_messages=True,
+        can_add_web_page_previews=True
+    )
+    await context.bot.restrict_chat_member(chat_id, target_id, permissions=permissions)
+    await message.reply_text("🔓 یوزر کو unmute کر دیا گیا۔")
 
 
 # Main app runner
