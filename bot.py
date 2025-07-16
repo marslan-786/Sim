@@ -16,6 +16,8 @@ from telegram.ext import (
 )
 from datetime import datetime, timedelta
 from typing import Dict, Set, List, Union
+from datetime import timedelta
+import re
 
 # لاگنگ سیٹ اپ
 logging.basicConfig(
@@ -32,27 +34,59 @@ user_warnings: Dict[int, Dict[int, int]] = {}  # چیٹ آئی ڈی -> {یوزر
 admin_list: Dict[int, List[int]] = {}  # چیٹ آئی ڈی -> ایڈمنز کی فہرست
 
 # مدت کی مددگار فنکشنز
+
 def parse_duration(duration_str: str) -> timedelta:
-    durations = {
-        '30m': timedelta(minutes=30),
-        '1h': timedelta(hours=1),
-        '6h': timedelta(hours=6),
-        '1d': timedelta(days=1),
-        '3d': timedelta(days=3),
-        '7d': timedelta(days=7)
-    }
-    return durations.get(duration_str, timedelta(hours=1))
+    """
+    duration_str کو پارس کر کے timedelta واپس کرتا ہے۔
+    سپورٹ شدہ فارمیٹس: 30m, 1h, 6h, 1d, 3d, 7d
+    یا انگریزی الفاظ: "30 minutes", "1 hour", "3 days" وغیرہ۔
+    اگر انپٹ غلط ہو یا خالی ہو تو 1 گھنٹہ ڈیفالٹ ہوتا ہے۔
+    """
+    if not duration_str:
+        return timedelta(hours=1)
+
+    duration_str = duration_str.strip().lower()
+
+    # regex سے نمبرز اور یونٹس نکالیں
+    match = re.match(r"(\d+)\s*(m|min|minute|minutes|h|hr|hour|hours|d|day|days)?", duration_str)
+    if not match:
+        # اگر میچ نہ ہوا تو 1 گھنٹہ واپس کریں
+        return timedelta(hours=1)
+
+    value = int(match.group(1))
+    unit = match.group(2)
+
+    if unit is None:
+        # اگر یونٹ نہ دیا تو ڈیفالٹ گھنٹہ سمجھیں
+        unit = "h"
+
+    if unit.startswith("m"):
+        return timedelta(minutes=value)
+    elif unit.startswith("h"):
+        return timedelta(hours=value)
+    elif unit.startswith("d"):
+        return timedelta(days=value)
+    else:
+        return timedelta(hours=1)
+
 
 def format_duration(duration: timedelta) -> str:
-    if duration.days >= 1:
-        return f"{duration.days} دن"
-    hours = duration.seconds // 3600
-    if hours >= 1:
+    """
+    timedelta لے کر اردو میں پڑھنے کے قابل سٹرنگ واپس کرے گا۔
+    """
+    days = duration.days
+    seconds = duration.seconds
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+
+    if days > 0:
+        return f"{days} دن"
+    elif hours > 0:
         return f"{hours} گھنٹے"
-    minutes = (duration.seconds % 3600) // 60
-    if minutes > 0:
+    elif minutes > 0:
         return f"{minutes} منٹ"
-    return "چند سیکنڈ"
+    else:
+        return "چند سیکنڈ"
 
 # گروپ کی ڈیفالٹ سیٹنگز
 def initialize_group_settings(chat_id: int, chat_type: str = "group"):
@@ -408,7 +442,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.ban_chat_member(chat_id, target_id, until_date=datetime.utcnow() + timedelta(hours=1))
         user_warnings[chat_id][target_id] = 0
         await message.reply_text("🚫 حد سے زیادہ وارننگز۔ 1 گھنٹے کے لیے بین کر دیا گیا۔")
-        
+
 # /unban ہینڈلر
 async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -437,6 +471,7 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"/unban ایرر: {e}")
         await message.reply_text("❌ ان بین کرنے میں مسئلہ ہوا۔")
 
+# /unmute ہینڈلر
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     chat_id = message.chat.id
