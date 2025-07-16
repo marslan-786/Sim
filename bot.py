@@ -324,26 +324,27 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    # ایڈمن چیک
     if not await is_admin(chat_id, user_id, context):
         await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
         return
 
-    # ریپلائی چیک
     if not message.reply_to_message:
         return await message.reply_text("⛔ اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
 
     target = message.reply_to_message.from_user
 
-    # بین کی مدت
-    duration_str = context.args[0] if context.args else "1h"
-    until_date = datetime.utcnow() + parse_duration(duration_str)
+    if context.args:
+        duration_str = context.args[0]
+        duration = parse_duration(duration_str)
+        until_date = datetime.utcnow() + duration
+        duration_text = format_duration(duration)
+    else:
+        until_date = None
+        duration_text = "لامحدود مدت"
 
     try:
         await context.bot.ban_chat_member(chat_id, target.id, until_date=until_date)
-        await message.reply_html(
-            f"🚫 {target.mention_html()} کو {format_duration(parse_duration(duration_str))} کے لیے بین کر دیا گیا۔"
-        )
+        await message.reply_html(f"🚫 {target.mention_html()} کو {duration_text} کے لیے بین کر دیا گیا۔")
     except Exception as e:
         logger.error(f"/ban ایرر: {e}")
         await message.reply_text("❌ بین کرنے میں مسئلہ پیش آیا۔")
@@ -362,14 +363,22 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await message.reply_text("🔇 اس کمانڈ کو کسی میسج پر ریپلائی میں استعمال کریں۔")
 
     target = message.reply_to_message.from_user
-    duration_str = context.args[0] if context.args else "1h"
-    until_date = datetime.utcnow() + parse_duration(duration_str)
+
+    # وقت چیک کریں
+    if context.args:
+        duration_str = context.args[0]
+        duration = parse_duration(duration_str)
+        until_date = datetime.utcnow() + duration
+        duration_text = format_duration(duration)
+    else:
+        until_date = None
+        duration_text = "لامحدود مدت"
 
     permissions = ChatPermissions(can_send_messages=False)
 
     try:
         await context.bot.restrict_chat_member(chat_id, target.id, permissions=permissions, until_date=until_date)
-        await message.reply_html(f"🔇 {target.mention_html()} کو {format_duration(parse_duration(duration_str))} کے لیے میوٹ کر دیا گیا۔")
+        await message.reply_html(f"🔇 {target.mention_html()} کو {duration_text} کے لیے میوٹ کر دیا گیا۔")
     except Exception as e:
         logger.error(f"/mute ایرر: {e}")
         await message.reply_text("❌ میوٹ کرنے میں مسئلہ پیش آیا۔")
