@@ -295,7 +295,74 @@ async def show_mention_settings(query, gid):
         parse_mode="Markdown"
     )
     
-    
+async def message_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+
+    if chat_id not in group_settings or user_id == context.bot.id:
+        return
+
+    text = message.text or message.caption or ""
+    is_forwarded = message.forward_from or message.forward_from_chat
+    has_links = bool(re.search(r"https?://|t\.me|telegram\.me|www\.", text))
+    has_mentions = any(e.type in [MessageEntity.MENTION, MessageEntity.TEXT_MENTION] for e in message.entities or [])
+
+    actions = action_settings.get(chat_id, {})
+    settings = group_settings.get(chat_id, {})
+
+    try:
+        if settings["block_links"] and actions["links"]["enabled"] and has_links:
+            await apply_action("links", chat_id, user_id, message, context)
+
+        elif settings["block_forwards"] and actions["forward"]["enabled"] and is_forwarded:
+            await apply_action("forward", chat_id, user_id, message, context)
+
+        elif settings["block_mentions"] and actions["mentions"]["enabled"] and has_mentions:
+            await apply_action("mentions", chat_id, user_id, message, context)
+
+    except Exception as e:
+        logger.error(f"فلٹر ہینڈلر ایرر: {e}")
+        
+
+async def apply_action(filter_type: str, chat_id: int, user_id: int, message, context):
+    s = action_settings[chat_id][filter_type]
+    action = s["action"]
+    duration = parse_duration(s["duration"])
+
+    # میسج ڈیلیٹ کریں
+    await message.delete()
+
+    # ایکشن اپلائی کریں
+    if action == "mute":
+        permissions = ChatPermissions(can_send_messages=False)
+        until_date = datetime.utcnow() + duration
+        await context.bot.restrict_chat_member(chat_id, user_id, permissions=permissions, until_date=until_date)
+        await message.reply_text(f"🔇 یوزر کو {format_duration(duration)} کے لیے میوٹ کر دیا گیا۔", quote=False)
+
+    elif action == "ban":
+        until_date = datetime.utcnow() + duration
+        await context.bot.ban_chat_member(chat_id, user_id, until_date=until_date)
+        await message.reply_text(f"🚫 یوزر کو {format_duration(duration)} کے لیے بین کر دیا گیا۔", quote=False)
+
+    elif action == "warn":
+        user_warnings.setdefault(chat_id, {})
+        user_warnings[chat_id][user_id] = user_warnings[chat_id].get(user_id, 0) + 1
+        warn_count = user_warnings[chat_id][user_id]
+        max_warn = s.get("warn_count", 3)
+
+        await message.reply_text(f"⚠️ وارننگ {warn_count}/{max_warn} دی گئی۔", quote=False)
+
+        if warn_count >= max_warn:
+            # اب mute یا ban کریں
+            if s.get("post_warn_action", "mute") == "ban":
+                await context.bot.ban_chat_member(chat_id, user_id, until_date=datetime.utcnow() + duration)
+                await message.reply_text(f"🚫 {warn_count} وارننگز کے بعد بین کر دیا گیا۔", quote=False)
+            else:
+                await context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False), until_date=datetime.utcnow() + duration)
+                await message.reply_text(f"🔇 {warn_count} وارننگز کے بعد میوٹ کر دیا گیا۔", quote=False)
+            user_warnings[chat_id][user_id] = 0
+
 # تمام ان لائن بٹنز کے لیے مین ہینڈلر
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -462,7 +529,7 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"/ban ایرر: {e}")
         await message.reply_text("❌ بین کرنے میں مسئلہ پیش آیا۔")
-
+        
 # /mute ہینڈلر
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -639,6 +706,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("unban", unban_user))
     app.add_handler(CommandHandler("unmute", unmute_user))
     app.add_handler(CommandHandler("settings", settings_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_filter_handler))
 
     print("🤖 بوٹ چل رہا ہے...")
     app.run_polling()
