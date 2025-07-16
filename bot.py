@@ -126,7 +126,7 @@ Examples:
     else:
         await update_or_query.edit_message_text(text, parse_mode="Markdown")
         
-# Show the groups user manages
+# Show the groups user manages پارٹ 2
 async def show_user_groups(query):
     uid = query.from_user.id
     initialize_user_chats(uid)
@@ -145,15 +145,19 @@ async def show_user_groups(query):
     for g in groups:
         try:
             chat = await query.bot.get_chat(int(g))
-            kb.append([InlineKeyboardButton(chat.title, callback_data=f"group_{g}")])
-        except:
-            pass
+            title = chat.title if chat.title else f"Group {g}"
+        except Exception as e:
+            logger.warning(f"❌ Failed to fetch chat info for {g}: {e}")
+            title = f"Group {g}"
+        kb.append([InlineKeyboardButton(title, callback_data=f"group_{g}")])
+
     kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
     await query.edit_message_text(
         "📊 *My Groups*\n\nSelect a group:",
         reply_markup=InlineKeyboardMarkup(kb),
         parse_mode="Markdown"
     )
+
 
 # Show the channels user manages
 async def show_user_channels(query):
@@ -174,15 +178,19 @@ async def show_user_channels(query):
     for c in chans:
         try:
             chat = await query.bot.get_chat(int(c))
-            kb.append([InlineKeyboardButton(chat.title, callback_data=f"channel_{c}")])
-        except:
-            pass
+            title = chat.title if chat.title else f"Channel {c}"
+        except Exception as e:
+            logger.warning(f"❌ Failed to fetch channel info for {c}: {e}")
+            title = f"Channel {c}"
+        kb.append([InlineKeyboardButton(title, callback_data=f"channel_{c}")])
+
     kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
     await query.edit_message_text(
         "📢 *My Channels*\n\nSelect a channel:",
         reply_markup=InlineKeyboardMarkup(kb),
         parse_mode="Markdown"
     )
+
 
 # Show settings menu for a group
 async def show_group_settings(update_or_query, gid: str):
@@ -200,7 +208,7 @@ async def show_group_settings(update_or_query, gid: str):
         await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
         
         
-# Show link settings submenu
+# Show link settings submenu پارٹ 3
 async def show_link_settings(query, gid: str):
     s = action_settings[gid]["links"]
     kb = [
@@ -346,7 +354,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.edit_message_text("❌ Error occurred. Try again.")
         
         
-# Message filter (links, forwards, mentions)
+# Message filter (links, forwards, mentions)۔ پارٹ 4
 async def message_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -430,7 +438,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         
         
-# Check admin rights
+# Check admin rights پارٹ 5
 async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
         admins = await context.bot.get_chat_administrators(chat_id)
