@@ -418,8 +418,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group_settings[gid]["block_links"] = s["enabled"]
 
             if not s["enabled"] and s["action"] == "delete":
-            s["action"] = "mute"
-
+              s["action"] = "mute"
             return await show_link_settings(q, gid)
 
         if data.startswith("cycle_link_action_"):
