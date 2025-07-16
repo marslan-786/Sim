@@ -1068,7 +1068,7 @@ if __name__ == "__main__":
 
     # 👇 TEXT handlers must be last group (so commands don't get blocked)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_message_input_handler), group=0)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_filter_handler), group=01)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_filter_handler), group=1)
     
 
     print("🤖 Bot is running...")
