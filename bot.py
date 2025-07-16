@@ -30,15 +30,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Memory data stores
-channel_settings = {}  # Structure: {channel_id: {"remove_forward_tag": True/False}}
-channel_forward_settings = {}  # Example: {123456789: {"remove_forward_tag": True}}
-user_state = {}  # user_id: {"state": ..., "gid": ...}
+channel_settings = {}  # channel_id -> {"remove_forward_tag": True/False}
+channel_forward_settings = {}  # user_id -> {"remove_forward_tag": True}
+user_state = {}  # user_id -> {"state": ..., "gid": ...}
 user_custom_add: Dict[int, int] = {}  # user_id -> group_id
-group_settings: Dict[int, dict] = {}
-action_settings: Dict[int, dict] = {}
-user_chats: Dict[int, Dict[str, Set[int]]] = {}  # store groups/channels in sets
+group_settings: Dict[int, dict] = {}  # group_id -> {"title": ..., etc.}
+action_settings: Dict[int, dict] = {}  # group_id -> {"links": {...}, "forward": {...}, etc.}
+user_chats: Dict[int, Dict[str, Set[int]]] = {}  # user_id -> {"groups": set(), "channels": set()}
 user_warnings: Dict[int, Dict[int, int]] = {}  # chat_id -> {user_id: warning_count}
-admin_list: Dict[int, List[int]] = {}  # chat_id -> list of admins
+admin_list: Dict[int, List[int]] = {}  # chat_id -> list of admin user_ids
+
+# Optional (Advanced Features)
+group_language: Dict[int, str] = {}  # group_id -> "en" or "ur"
+message_logs: Dict[int, List[dict]] = {}  # group_id -> list of message logs
 
 # Duration parser helper
 def parse_duration(duration_str: str) -> timedelta:
@@ -85,9 +89,10 @@ def format_duration(duration: timedelta) -> str:
         return "a few seconds"
 
 # Default group settings
-def initialize_group_settings(chat_id: int, chat_type: str = "group"):
+def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str = None, user_id: int = None):
     if chat_id not in group_settings:
         group_settings[chat_id] = {
+            "title": title or f"Group {chat_id}",
             "block_links": False,
             "block_forwards": False,
             "remove_forward_tag": False,
@@ -95,6 +100,7 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
             "allowed_domains": set(),
             "chat_type": chat_type
         }
+
     if chat_id not in action_settings:
         action_settings[chat_id] = {
             "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
@@ -108,10 +114,17 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
                 "messages": []
             }
         }
+
     if chat_id not in admin_list:
-        admin_list[chat_id] = []
+        admin_list[chat_id] = {}
+
     if chat_id not in user_warnings:
         user_warnings[chat_id] = {}
+
+    if user_id is not None:
+        if user_id not in user_chats:
+            user_chats[user_id] = {"groups": set(), "channels": set()}
+        user_chats[user_id]["groups"].add(chat_id)
 
 # Track user's groups/channels
 # /start command handler
@@ -156,15 +169,18 @@ Examples:
 async def show_user_groups(query):
     user_id = query.from_user.id
     groups = user_chats.get(user_id, {}).get("groups", set())
+
     if not groups:
-        await query.edit_message_text("😕 You haven't added this bot to any group yet. Please Again /start")
+        await query.edit_message_text("😕 آپ نے ابھی تک اس بوٹ کو کسی بھی گروپ میں ایڈ نہیں کیا۔\n\n🔄 براہ کرم بوٹ کو اپنے گروپ میں ایڈ کریں اور پھر /start دبائیں۔")
         return
 
     kb = []
     for gid in groups:
-        kb.append([InlineKeyboardButton(f"Group: {gid}", callback_data=f"group_{gid}")])
-    kb.append([InlineKeyboardButton("🏠 Menu", callback_data="force_start")])
-    await query.edit_message_text("📊 Your Groups:", reply_markup=InlineKeyboardMarkup(kb))
+        title = group_settings.get(gid, {}).get("title", f"Group {gid}")
+        kb.append([InlineKeyboardButton(f"📛 {title}", callback_data=f"group_{gid}")])
+
+    kb.append([InlineKeyboardButton("🏠 مین مینو", callback_data="force_start")])
+    await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
 
 # Show user's channels as buttons
 async def toggle_forward_removal(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
