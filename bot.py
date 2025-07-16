@@ -115,29 +115,13 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
 
 # Track user's groups/channels
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    initialize_user_chats(user_id)
+    print("Start command called")
+    print("update.message =", update.message)
 
-    message = update.message or update.callback_query.message
-    if not message:
-        return
-
-    keyboard = [
-        [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-        [InlineKeyboardButton("📊 My Groups", callback_data="your_groups")],
-        [InlineKeyboardButton("⚙️ Channel Settings", callback_data="channel_settings")],
-        [InlineKeyboardButton("❓ Help", callback_data="help_command")]
-    ]
-
-    # Remove this condition to show menu everywhere
-    await message.reply_text(
-        "👋 Welcome to Kami_Broken\n\n"
-        "Group Management Bot!\n"
-        "🔹 Add to your Groups/Channels\n"
-        "🔹 Configure settings\n"
-        "🔹 Admin Tools",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    if update.message:
+        await update.message.reply_text("Start command working!")
+    else:
+        await update.effective_chat.send_message("⚠️ Couldn't fetch your message.")
 
 # /help handler
 async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
