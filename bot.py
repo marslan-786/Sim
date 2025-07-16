@@ -222,13 +222,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     try:
-        if data == "start":
-            # اصل میں /start کمانڈ بھیجیں
-            await context.bot.send_message(
-                chat_id=uid,
-                text="/start",
-                parse_mode="Markdown"
-            )
+        if data == "force_start":
+            # یوزر کی طرف سے /start بھیجنے کا بٹن
+            keyboard = [[InlineKeyboardButton(
+                "🔄 مینو ری لوڈ کریں", 
+                switch_inline_query_current_chat="/start"
+            )]]
+            await q.edit_message_text(
+                "مینو پر واپس جانے کے لیے نیچے دیے گئے بٹن پر کلک کریں:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             return
         if data == "your_groups":
             return await show_user_groups(q)
