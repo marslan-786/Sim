@@ -87,14 +87,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     initialize_user_chats(user_id)
 
-    if update.message.chat.type == "private":
+    # کسی بھی صورت میں، message یا callback_query سے message حاصل کریں
+    message = update.message or update.callback_query.message
+
+    if message.chat.type == "private":
         keyboard = [
             [InlineKeyboardButton("➕ گروپ میں شامل کریں", url=f"https://t.me/{context.bot.username}?startgroup=true")],
             [InlineKeyboardButton("📊 میرے گروپس", callback_data="your_groups")],
             [InlineKeyboardButton("📢 میرے چینلز", callback_data="your_channels")],
             [InlineKeyboardButton("❓ مدد", callback_data="help_command")]
         ]
-        await update.message.reply_text(
+        await message.reply_text(
             "👋 گروپ مینجمنٹ بوٹ میں خوش آمدید!\n\n"
             "🔹 اپنے گروپس/چینلز میں شامل کریں\n"
             "🔹 سیٹنگز کو کنفیگر کریں\n"
@@ -102,8 +105,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        cid = update.message.chat.id
-        ctype = "channel" if update.message.chat.type == "channel" else "group"
+        cid = message.chat.id
+        ctype = "channel" if message.chat.type == "channel" else "group"
         initialize_user_chats(user_id)
         user_chats[user_id][f"{ctype}s"].add(cid)
         initialize_group_settings(cid, ctype)
