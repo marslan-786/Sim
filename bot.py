@@ -447,17 +447,11 @@ async def show_custom_settings(query, gid):
 async def message_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user_id = message.from_user.id
-    chat = message.chat
-    chat_id = chat.id
+    chat_id = message.chat_id
 
-    text = message.text or message.caption or ""
-    is_forwarded = message.forward_from or message.forward_from_chat
-    has_links = bool(re.search(r"https?://|t\.me|telegram\.me|www\.", text))
-    has_mentions = any(e.type in [MessageEntity.MENTION, MessageEntity.TEXT_MENTION] for e in message.entities or [])
-
-    try:
-        # ✅ Forward tag removal (private use only)
-        if message.forward_from_chat and channel_forward_settings.get(user_id, {}).get("remove_forward_tag", False):
+    # ✅ Remove forward tag only in private chat
+    if message.forward_from_chat and message.chat.type == "private":
+        if channel_forward_settings.get(user_id, {}).get("remove_forward_tag", False):
             try:
                 await message.delete()
                 await context.bot.copy_message(
@@ -465,37 +459,40 @@ async def message_filter_handler(update: Update, context: ContextTypes.DEFAULT_T
                     from_chat_id=message.forward_from_chat.id,
                     message_id=message.forward_from_message_id
                 )
-                return
+                return  # stop here if forward tag was removed
             except Exception as e:
                 logger.warning(f"Failed to remove forward tag: {e}")
 
-        # ✅ Group filters
-        if chat.type in ["group", "supergroup"]:
-            initialize_group_settings(chat_id)
+    # ✅ Group filters (apply_action)
+    if message.chat.type in ["group", "supergroup"]:
+        if chat_id not in group_settings or user_id == context.bot.id:
+            return
 
-            actions = action_settings.get(chat_id, {})
-            settings = group_settings.get(chat_id, {})
+        text = message.text or message.caption or ""
+        is_forwarded = message.forward_from or message.forward_from_chat
+        has_links = bool(re.search(r"https?://|t\.me|telegram\.me|www\.", text))
+        has_mentions = any(e.type in [MessageEntity.MENTION, MessageEntity.TEXT_MENTION] for e in message.entities or [])
 
-            # ✅ Link filter
+        actions = action_settings.get(chat_id, {})
+        settings = group_settings.get(chat_id, {})
+
+        try:
             if settings.get("block_links") and actions.get("links", {}).get("enabled") and has_links:
                 return await apply_action("links", chat_id, user_id, message, context)
 
-            # ✅ Forward filter
-            if settings.get("block_forwards") and actions.get("forward", {}).get("enabled") and is_forwarded:
+            elif settings.get("block_forwards") and actions.get("forward", {}).get("enabled") and is_forwarded:
                 return await apply_action("forward", chat_id, user_id, message, context)
 
-            # ✅ Mention filter
-            if settings.get("block_mentions") and actions.get("mentions", {}).get("enabled") and has_mentions:
+            elif settings.get("block_mentions") and actions.get("mentions", {}).get("enabled") and has_mentions:
                 return await apply_action("mentions", chat_id, user_id, message, context)
 
-            # ✅ Custom message filter
-            if actions.get("custom", {}).get("enabled") and "custom_messages" in settings:
-                for word in settings["custom_messages"]:
+            elif actions.get("custom", {}).get("enabled") and "custom_messages" in group_settings[chat_id]:
+                for word in group_settings[chat_id]["custom_messages"]:
                     if word.lower() in text.lower():
                         return await apply_action("custom", chat_id, user_id, message, context)
 
-    except Exception as e:
-        logger.error(f"[Filter Handler Error] {e}")
+        except Exception as e:
+            logger.error(f"Filter Handler Error: {e}")
 
 
 # Apply mute/ban/warn action
