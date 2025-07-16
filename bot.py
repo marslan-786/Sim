@@ -412,16 +412,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 🔗 لنک سیٹنگز
         if data.startswith("toggle_links_enabled_"):
             gid = int(data.rsplit("_", 1)[1])
+
+            # 👇 یہ لائن لازمی add کریں تاکہ dict initialize ہو
+            initialize_group_settings(gid)
+
             s = action_settings[gid]["links"]
             s["enabled"] = not s["enabled"]
 
-          # 👇 یہ لائن ایڈ کریں تاکہ filter on ہو
+            # 👇 اب safe ہے یہ لائن لگانا
             group_settings[gid]["block_links"] = s["enabled"]
 
         if not s["enabled"] and s["action"] == "delete":
-             s["action"] = "mute"
+            s["action"] = "mute"
 
-             return await show_link_settings(q, gid)
+            return await show_link_settings(q, gid)
 
         if data.startswith("cycle_link_action_"):
             gid = int(data.rsplit("_",1)[1])
@@ -442,14 +446,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_settings[gid]["links"]["warn"] = not action_settings[gid]["links"]["warn"]
             return await show_link_settings(q, gid)
 
-        # 🔁 فارورڈ سیٹنگز
         if data.startswith("toggle_forward_enabled_"):
             gid = int(data.rsplit("_",1)[1])
+            initialize_group_settings(gid)  # 👈 Add this
             s = action_settings[gid]["forward"]
             s['enabled'] = not s['enabled']
-            group_settings[gid]["block_forwards"] = s["enabled"]
-            if not s['enabled'] and s['action'] == 'delete':
-                s['action'] = 'mute'
+            group_settings[gid]["block_forwards"] = s["enabled"]  # 👈 safe to access now
             return await show_forward_settings(q, gid)
 
         if data.startswith("cycle_forward_action_"):
@@ -471,14 +473,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             action_settings[gid]["forward"]["warn"] = not action_settings[gid]["forward"]["warn"]
             return await show_forward_settings(q, gid)
 
-        # 🗣 مینشن سیٹنگز
         if data.startswith("toggle_mention_enabled_"):
             gid = int(data.rsplit("_",1)[1])
+            initialize_group_settings(gid)  # 👈 Add this
             s = action_settings[gid]["mentions"]
             s['enabled'] = not s['enabled']
             group_settings[gid]["block_mentions"] = s["enabled"]
-            if not s['enabled'] and s['action'] == 'delete':
-                s['action'] = 'mute'
             return await show_mention_settings(q, gid)
 
         if data.startswith("cycle_mention_action_"):
