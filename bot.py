@@ -785,6 +785,16 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"موجودہ warnings: {user_warnings[chat_id][target]}",
         parse_mode="HTML"
     )
+    
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if chat.type not in ["group", "supergroup"]:
+        await update.message.reply_text("⚠️ یہ کمانڈ صرف گروپ میں کام کرتی ہے۔")
+        return
+
+    await show_group_settings(update, chat.id)
 
 # Main app runner
 if __name__ == "__main__":
