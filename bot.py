@@ -129,7 +129,17 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
 # Track user's groups/channels
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
     user = update.effective_user
+
+    # If message is from a group, save group info
+    if chat.type in ["group", "supergroup"]:
+        initialize_group_settings(chat.id, chat.type)
+        user_chats.setdefault(user.id, {}).setdefault("groups", set()).add(chat.id)
+        print(f"[START] Added group {chat.id} to user {user.id}")
+        return
+
+    # If message is from private chat, show start menu
     keyboard = [
         [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
         [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
