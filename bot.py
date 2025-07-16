@@ -767,6 +767,24 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.restrict_chat_member(chat_id, target_id, permissions=permissions)
     await message.reply_text("🔓 یوزر کو unmute کر دیا گیا۔")
 
+async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    chat_id = message.chat_id
+    from_user = message.from_user
+
+    if not message.reply_to_message:
+        await message.reply_text("⛔ اس کمانڈ کو استعمال کرنے کے لیے کسی کے میسج پر reply کریں۔")
+        return
+
+    target = message.reply_to_message.from_user.id
+    user_warnings.setdefault(chat_id, {})
+    user_warnings[chat_id][target] = user_warnings[chat_id].get(target, 0) + 1
+
+    await message.reply_text(
+        f"⚠️ {message.reply_to_message.from_user.mention_html()} کو ایک warning دی گئی ہے!\n"
+        f"موجودہ warnings: {user_warnings[chat_id][target]}",
+        parse_mode="HTML"
+    )
 
 # Main app runner
 if __name__ == "__main__":
