@@ -120,17 +120,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = update.message or update.callback_query.message
     if not message:
-        print("❌ No message found")
         return
 
-    if message.chat.type == "private":
-        print("✅ Sending start menu...")
-        keyboard = [
-            [InlineKeyboardButton("Test Button", callback_data="test")],
-        ]
-        await message.reply_text("🔹 Test Inline Menu:", reply_markup=InlineKeyboardMarkup(keyboard))
-    else:
-        await message.reply_text("👥 Group start command used.")
+    keyboard = [
+        [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+        [InlineKeyboardButton("📊 My Groups", callback_data="your_groups")],
+        [InlineKeyboardButton("⚙️ Channel Settings", callback_data="channel_settings")],
+        [InlineKeyboardButton("❓ Help", callback_data="help_command")]
+    ]
+
+    # Remove this condition to show menu everywhere
+    await message.reply_text(
+        "👋 Welcome to Kami_Broken\n\n"
+        "Group Management Bot!\n"
+        "🔹 Add to your Groups/Channels\n"
+        "🔹 Configure settings\n"
+        "🔹 Admin Tools",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # /help handler
 async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
