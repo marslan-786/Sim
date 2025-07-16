@@ -101,9 +101,9 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
         }
     if chat_id not in action_settings:
         action_settings[chat_id] = {
-            "links": {"action": "delete", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-            "forward": {"action": "delete", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-            "mentions": {"action": "delete", "duration": "1h", "warn": True, "delete": True, "enabled": False}
+            "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+            "forward": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+            "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False}
         }
     if chat_id not in admin_list:
         admin_list[chat_id] = []
@@ -245,7 +245,7 @@ async def show_link_settings(query, gid):
             callback_data=f"change_link_duration_{gid}"
         )])
 
-    buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
+    buttons.append([InlineKeyboardButton("📋 مینیو", callback_data="force_start")])
 
     await query.edit_message_text(
         text="🔗 *لنک سیٹنگز*",
@@ -284,7 +284,7 @@ async def show_forward_settings(query, gid):
             callback_data=f"change_forward_duration_{gid}"
         )])
 
-    buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
+    buttons.append([InlineKeyboardButton("📋 مینیو", callback_data="force_start")])
 
     await query.edit_message_text(
         text="📤 *فارورڈ سیٹنگز*",
@@ -323,7 +323,7 @@ async def show_mention_settings(query, gid):
             callback_data=f"change_mention_duration_{gid}"
         )])
 
-    buttons.append([InlineKeyboardButton("🔙 واپس", callback_data=f"group_settings_{gid}")])
+    buttons.append([InlineKeyboardButton("📋 مینیو", callback_data="force_start")])
 
     await query.edit_message_text(
         text="👥 *مینشن سیٹنگز*",
@@ -408,7 +408,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if data == "force_start":
-            return await start(update, context)
+            await q.message.delete()  # موجودہ میسج ڈیلیٹ کرو
+            await start(update, context)  # نیا مین مینیو بھیجو
+            return
         if data == "your_groups":
             return await show_user_groups(q)
         if data == "your_channels":
@@ -764,7 +766,7 @@ async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYP
 
 # مین
 if __name__ == "__main__":
-    TOKEN = "7405849363:AAH3-6QuSUb2bJvTkpWfqoSlVKeYn-ERfpo"  # اپنا بوٹ ٹوکن یہاں ڈالیں
+    TOKEN = "7735984673:AAGEhbsdIfO-j8B3DvBwBW9JSb9BcPd_J6o"  # اپنا بوٹ ٹوکن یہاں ڈالیں
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
