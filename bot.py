@@ -1,7 +1,11 @@
-# ✅ پارٹ 1: Imports, Logging setup, and Initial Data Stores
-
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions, MessageEntity
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ChatPermissions,
+    MessageEntity
+)
 from telegram.ext import (
     ApplicationBuilder,
     ContextTypes,
@@ -11,7 +15,7 @@ from telegram.ext import (
     filters,
 )
 from datetime import datetime, timedelta
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Union
 
 # Logging setup
 logging.basicConfig(
@@ -21,14 +25,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # In-memory data stores
-group_settings: Dict[str, dict] = {}
-action_settings: Dict[str, dict] = {}
-user_chats: Dict[int, Dict[str, Set[str]]] = {}
-user_warnings: Dict[str, Dict[int, int]] = {}
-admin_list: Dict[str, List[int]] = {}
+group_settings: Dict[int, dict] = {}
+action_settings: Dict[int, dict] = {}
+user_chats: Dict[int, Dict[str, Set[int]]] = {}  # groups and channels as sets of ints
+user_warnings: Dict[int, Dict[int, int]] = {}  # chat_id -> {user_id: warnings_count}
+admin_list: Dict[int, List[int]] = {}  # chat_id -> list of admin user ids
 
-
-# ✅ پارٹ 2: مدت کا حساب (Duration Helpers) اور Initialization Functions
 
 # Duration helpers
 def parse_duration(duration_str: str) -> timedelta:
@@ -54,7 +56,7 @@ def format_duration(duration: timedelta) -> str:
     return "چند سیکنڈ"
 
 # Initialize group defaults
-def initialize_group_settings(chat_id: str, chat_type: str = "group"):
+def initialize_group_settings(chat_id: int, chat_type: str = "group"):
     if chat_id not in group_settings:
         group_settings[chat_id] = {
             "block_links": False,
@@ -81,9 +83,7 @@ def initialize_user_chats(user_id: int):
         user_chats[user_id] = {"groups": set(), "channels": set()}
         
         
-  
-# ✅ پارٹ 3: /start اور /help کمانڈز اور مین مینو انٹرفیس
-
+        
 # /start handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -104,7 +104,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        cid = str(update.message.chat.id)
+        cid = update.message.chat.id
         ctype = "channel" if update.message.chat.type == "channel" else "group"
         initialize_user_chats(user_id)
         user_chats[user_id][f"{ctype}s"].add(cid)
@@ -112,7 +112,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_help(update, context)
 
 # /help handler
-async def show_help(update_or_query, context=None):
+async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
     text = """
 🤖 *Bot Commands*:
 
@@ -137,130 +137,90 @@ Examples:
         
         
         
-# ✅ پارٹ 4: Show user groups/channels and group settings menu
-
-# Show the groups user manages
-async def show_user_groups(query):
-    uid = query.from_user.id
-    initialize_user_chats(uid)
-    groups = user_chats[uid]["groups"]
-
-    if not groups:
-        kb = [[InlineKeyboardButton("🔙 Back", callback_data="start")]]
-        await query.edit_message_text(
-            "📊 *My Groups*\n\nYou haven't added me anywhere!",
-            reply_markup=InlineKeyboardMarkup(kb),
-            parse_mode="Markdown"
-        )
-        return
-
-    kb = []
-    for g in groups:
-        try:
-            chat = await query.bot.get_chat(int(g))
-            title = chat.title if chat.title else f"Group {g}"
-        except Exception as e:
-            logger.warning(f"❌ Failed to fetch chat info for {g}: {e}")
-            title = f"Group {g}"
-        kb.append([InlineKeyboardButton(title, callback_data=f"group_{g}")])
-
-    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
-    await query.edit_message_text(
-        "📊 *My Groups*\n\nSelect a group:",
-        reply_markup=InlineKeyboardMarkup(kb),
-        parse_mode="Markdown"
-    )
-
-# Show the channels user manages
-async def show_user_channels(query):
-    uid = query.from_user.id
-    initialize_user_chats(uid)
-    chans = user_chats[uid]["channels"]
-
-    if not chans:
-        kb = [[InlineKeyboardButton("🔙 Back", callback_data="start")]]
-        await query.edit_message_text(
-            "📢 *My Channels*\n\nYou haven't added me to any channel!",
-            reply_markup=InlineKeyboardMarkup(kb),
-            parse_mode="Markdown"
-        )
-        return
-
-    kb = []
-    for c in chans:
-        try:
-            chat = await query.bot.get_chat(int(c))
-            title = chat.title if chat.title else f"Channel {c}"
-        except Exception as e:
-            logger.warning(f"❌ Failed to fetch channel info for {c}: {e}")
-            title = f"Channel {c}"
-        kb.append([InlineKeyboardButton(title, callback_data=f"channel_{c}")])
-
-    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
-    await query.edit_message_text(
-        "📢 *My Channels*\n\nSelect a channel:",
-        reply_markup=InlineKeyboardMarkup(kb),
-        parse_mode="Markdown"
-    )
-
 # Show settings menu for a group
-async def show_group_settings(update_or_query, gid: str):
+async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandler], gid: int):
     initialize_group_settings(gid)
     kb = [
         [InlineKeyboardButton("🔗 Link Settings", callback_data=f"link_settings_{gid}")],
         [InlineKeyboardButton("↩️ Forward Settings", callback_data=f"forward_settings_{gid}")],
         [InlineKeyboardButton("🗣 Mention Settings", callback_data=f"mention_settings_{gid}")],
-        [InlineKeyboardButton("🔙 Back", callback_data="your_groups")]
+        [InlineKeyboardButton("🔙 Back", callback_data="your_groups")]  # Back to user groups list
     ]
     text = f"⚙️ *Settings for* `{gid}`\nSelect category:"
     if isinstance(update_or_query, Update):
         await update_or_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
     else:
         await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
-        
-        
-        
-# ✅ پارٹ 5: Settings Submenus for Links, Forwards, Mentions
 
 # Show link settings submenu
-async def show_link_settings(query, gid: str):
+async def show_link_settings(query: CallbackQueryHandler, gid: int):
     s = action_settings[gid]["links"]
     kb = [
         [InlineKeyboardButton(f"Enabled: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_links_enabled_{gid}")],
         [InlineKeyboardButton(f"Action: {s['action']}", callback_data=f"cycle_link_action_{gid}")],
         [InlineKeyboardButton(f"Duration: {s['duration']}", callback_data=f"change_link_duration_{gid}")],
         [InlineKeyboardButton(f"Warn: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_link_warn_{gid}")],
-        [InlineKeyboardButton("🔙 Back", callback_data=f"group_{gid}")]
+        [InlineKeyboardButton("🔙 Back", callback_data=f"group_settings_back_{gid}")]  # Back to group main settings
     ]
     await query.edit_message_text("🔗 *Link Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
 # Show forward settings submenu
-async def show_forward_settings(query, gid: str):
+async def show_forward_settings(query: CallbackQueryHandler, gid: int):
     s = action_settings[gid]["forward"]
     kb = [
         [InlineKeyboardButton(f"Enabled: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_forward_enabled_{gid}")],
         [InlineKeyboardButton(f"Action: {s['action']}", callback_data=f"cycle_forward_action_{gid}")],
         [InlineKeyboardButton(f"Duration: {s['duration']}", callback_data=f"change_forward_duration_{gid}")],
         [InlineKeyboardButton(f"Warn: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_forward_warn_{gid}")],
-        [InlineKeyboardButton("🔙 Back", callback_data=f"group_{gid}")]
+        [InlineKeyboardButton("🔙 Back", callback_data=f"group_settings_back_{gid}")]  # Back to group main settings
     ]
     await query.edit_message_text("↩️ *Forward Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
 
 # Show mention settings submenu
-async def show_mention_settings(query, gid: str):
+async def show_mention_settings(query: CallbackQueryHandler, gid: int):
     s = action_settings[gid]["mentions"]
     kb = [
         [InlineKeyboardButton(f"Enabled: {'✅' if s['enabled'] else '❌'}", callback_data=f"toggle_mention_enabled_{gid}")],
         [InlineKeyboardButton(f"Action: {s['action']}", callback_data=f"cycle_mention_action_{gid}")],
         [InlineKeyboardButton(f"Duration: {s['duration']}", callback_data=f"change_mention_duration_{gid}")],
         [InlineKeyboardButton(f"Warn: {'✅' if s['warn'] else '❌'}", callback_data=f"toggle_mention_warn_{gid}")],
-        [InlineKeyboardButton("🔙 Back", callback_data=f"group_{gid}")]
+        [InlineKeyboardButton("🔙 Back", callback_data=f"group_settings_back_{gid}")]  # Back to group main settings
     ]
     await query.edit_message_text("🗣 *Mention Settings*", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
     
     
-# ✅ پارٹ 6: Handle all inline buttons / callback queries
+    
+    
+# Show user's groups as inline buttons
+async def show_user_groups(query):
+    user_id = query.from_user.id
+    groups = user_chats.get(user_id, {}).get("groups", set())
+    if not groups:
+        await query.edit_message_text("😕 آپ نے ابھی کسی گروپ میں اس بوٹ کو شامل نہیں کیا۔")
+        return
 
+    kb = []
+    for gid in groups:
+        kb.append([InlineKeyboardButton(f"Group: {gid}", callback_data=f"group_{gid}")])
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
+    await query.edit_message_text("📊 آپ کے گروپس:", reply_markup=InlineKeyboardMarkup(kb))
+
+# Show user's channels as inline buttons
+async def show_user_channels(query):
+    user_id = query.from_user.id
+    channels = user_chats.get(user_id, {}).get("channels", set())
+    if not channels:
+        await query.edit_message_text("😕 آپ نے ابھی کسی چینل میں اس بوٹ کو شامل نہیں کیا۔")
+        return
+
+    kb = []
+    for cid in channels:
+        kb.append([InlineKeyboardButton(f"Channel: {cid}", callback_data=f"group_{cid}")])
+    kb.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
+    await query.edit_message_text("📢 آپ کے چینلز:", reply_markup=InlineKeyboardMarkup(kb))
+
+
+# Main button handler for all inline buttons
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data
@@ -278,86 +238,92 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await show_help(q, context)
 
         if data.startswith("group_"):
-            gid = data.split("_",1)[1]
-            if await is_admin(int(gid), uid, context):
+            gid = int(data.split("_",1)[1])
+            if await is_admin(gid, uid, context):
                 return await show_group_settings(q, gid)
-            return await q.answer("⚠️ Only admins!", show_alert=True)
+            return await q.answer("⚠️ صرف ایڈمنز کے لیے!", show_alert=True)
+
+        # Back button from submenus to group settings
+        if data.startswith("group_settings_back_"):
+            gid = int(data.rsplit("_",1)[1])
+            if await is_admin(gid, uid, context):
+                return await show_group_settings(q, gid)
+            return await q.answer("⚠️ صرف ایڈمنز کے لیے!", show_alert=True)
 
         # Link toggles
         if data.startswith("toggle_links_enabled_"):
-            gid = data.rsplit("_",1)[1]
-            action_settings[gid]["links"]["enabled"] ^= True
+            gid = int(data.rsplit("_",1)[1])
+            action_settings[gid]["links"]["enabled"] = not action_settings[gid]["links"]["enabled"]
             return await show_link_settings(q, gid)
         if data.startswith("cycle_link_action_"):
-            gid = data.rsplit("_",1)[1]
+            gid = int(data.rsplit("_",1)[1])
             opts = ["delete", "mute", "ban"]
             cur = action_settings[gid]["links"]["action"]
             action_settings[gid]["links"]["action"] = opts[(opts.index(cur)+1)%3]
             return await show_link_settings(q, gid)
         if data.startswith("change_link_duration_"):
-            gid = data.rsplit("_",1)[1]
+            gid = int(data.rsplit("_",1)[1])
             opts = ["30m","1h","6h","1d","3d","7d"]
             cur = action_settings[gid]["links"]["duration"]
             action_settings[gid]["links"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_link_settings(q, gid)
         if data.startswith("toggle_link_warn_"):
-            gid = data.rsplit("_",1)[1]
-            action_settings[gid]["links"]["warn"] ^= True
+            gid = int(data.rsplit("_",1)[1])
+            action_settings[gid]["links"]["warn"] = not action_settings[gid]["links"]["warn"]
             return await show_link_settings(q, gid)
 
         # Forward toggles
         if data.startswith("toggle_forward_enabled_"):
-            gid = data.rsplit("_",1)[1]
-            action_settings[gid]["forward"]["enabled"] ^= True
+            gid = int(data.rsplit("_",1)[1])
+            action_settings[gid]["forward"]["enabled"] = not action_settings[gid]["forward"]["enabled"]
             return await show_forward_settings(q, gid)
         if data.startswith("cycle_forward_action_"):
-            gid = data.rsplit("_",1)[1]
+            gid = int(data.rsplit("_",1)[1])
             opts = ["delete", "mute", "ban"]
             cur = action_settings[gid]["forward"]["action"]
             action_settings[gid]["forward"]["action"] = opts[(opts.index(cur)+1)%3]
             return await show_forward_settings(q, gid)
         if data.startswith("change_forward_duration_"):
-            gid = data.rsplit("_",1)[1]
+            gid = int(data.rsplit("_",1)[1])
             opts = ["30m","1h","6h","1d","3d","7d"]
             cur = action_settings[gid]["forward"]["duration"]
             action_settings[gid]["forward"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_forward_settings(q, gid)
         if data.startswith("toggle_forward_warn_"):
-            gid = data.rsplit("_",1)[1]
-            action_settings[gid]["forward"]["warn"] ^= True
+            gid = int(data.rsplit("_",1)[1])
+            action_settings[gid]["forward"]["warn"] = not action_settings[gid]["forward"]["warn"]
             return await show_forward_settings(q, gid)
 
         # Mention toggles
         if data.startswith("toggle_mention_enabled_"):
-            gid = data.rsplit("_",1)[1]
-            action_settings[gid]["mentions"]["enabled"] ^= True
+            gid = int(data.rsplit("_",1)[1])
+            action_settings[gid]["mentions"]["enabled"] = not action_settings[gid]["mentions"]["enabled"]
             return await show_mention_settings(q, gid)
         if data.startswith("cycle_mention_action_"):
-            gid = data.rsplit("_",1)[1]
+            gid = int(data.rsplit("_",1)[1])
             opts = ["delete", "mute", "ban"]
             cur = action_settings[gid]["mentions"]["action"]
             action_settings[gid]["mentions"]["action"] = opts[(opts.index(cur)+1)%3]
             return await show_mention_settings(q, gid)
         if data.startswith("change_mention_duration_"):
-            gid = data.rsplit("_",1)[1]
+            gid = int(data.rsplit("_",1)[1])
             opts = ["30m","1h","6h","1d","3d","7d"]
             cur = action_settings[gid]["mentions"]["duration"]
             action_settings[gid]["mentions"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
             return await show_mention_settings(q, gid)
         if data.startswith("toggle_mention_warn_"):
-            gid = data.rsplit("_",1)[1]
-            action_settings[gid]["mentions"]["warn"] ^= True
+            gid = int(data.rsplit("_",1)[1])
+            action_settings[gid]["mentions"]["warn"] = not action_settings[gid]["mentions"]["warn"]
             return await show_mention_settings(q, gid)
 
         await q.answer("Unknown button!", show_alert=True)
     except Exception as e:
         logger.error(f"Callback error: {e}")
-        await q.edit_message_text("❌ Error occurred. Try again.")
+        await q.edit_message_text("❌ کچھ غلط ہوگیا، دوبارہ کوشش کریں۔")
         
         
         
-# ✅ پارٹ 7: Admin check and Main bot run section
-
+        
 # Check admin rights
 async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
@@ -375,7 +341,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", show_help))
     app.add_handler(CallbackQueryHandler(button_handler))
-  #  app.add_handler(MessageHandler(filters.ALL, message_filter))
 
     print("🤖 Bot is running...")
     app.run_polling()
+    
