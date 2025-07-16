@@ -100,11 +100,18 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
             "chat_type": chat_type
         }
     if chat_id not in action_settings:
-        action_settings[chat_id] = {
-            "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-            "forward": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-            "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False}
+    action_settings[chat_id] = {
+        "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+        "forward": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+        "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+        "custom": {
+            "enabled": False,
+            "action": "off",       # 'off', 'mute', 'ban', 'warn'
+            "warn_count": 1,
+            "duration": "1h",
+            "messages": []         # یہاں کسٹم میسجز محفوظ ہوں گے
         }
+    }
     if chat_id not in admin_list:
         admin_list[chat_id] = []
     if chat_id not in user_warnings:
@@ -206,6 +213,7 @@ async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandle
         [InlineKeyboardButton("🔗 لنک سیٹنگز", callback_data=f"link_settings_{gid}")],
         [InlineKeyboardButton("↩️ فارورڈ سیٹنگز", callback_data=f"forward_settings_{gid}")],
         [InlineKeyboardButton("🗣 مینشن سیٹنگز", callback_data=f"mention_settings_{gid}")],
+        [InlineKeyboardButton("📝 کسٹم میسج فلٹر", callback_data=f"custom_settings_{gid}")],
         [InlineKeyboardButton("🔙 واپس", callback_data="your_groups")]  # تبدیل شدہ
     ]
     text = f"⚙️ *سیٹنگز برائے* `{gid}`\nزمرہ منتخب کریں:"
@@ -327,6 +335,49 @@ async def show_mention_settings(query, gid):
 
     await query.edit_message_text(
         text="👥 *مینشن سیٹنگز*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode="Markdown"
+    )
+    
+# 📝 کسٹم میسج سیٹنگز سب مینو
+async def show_custom_settings(query, gid):
+    s = action_settings[gid]["custom"]
+    buttons = []
+
+    buttons.append([InlineKeyboardButton(
+        f"✅ فلٹرنگ: {'آن' if s['enabled'] else 'آف'}",
+        callback_data=f"toggle_custom_enabled_{gid}"
+    )])
+
+    if s["enabled"]:
+        current_action = s.get('action', 'off')
+
+        buttons.append([InlineKeyboardButton(
+            f"🎯 ایکشن: {current_action.capitalize()}",
+            callback_data=f"cycle_custom_action_{gid}"
+        )])
+
+        if current_action == "warn":
+            warn_count = s.get('warn_count', 1)
+            buttons.append([InlineKeyboardButton(
+                f"⚠️ وارننگ کی تعداد: {warn_count}",
+                callback_data=f"cycle_custom_warn_count_{gid}"
+            )])
+
+        buttons.append([InlineKeyboardButton(
+            f"⏰ دورانیہ: {s.get('duration', '30m')}",
+            callback_data=f"change_custom_duration_{gid}"
+        )])
+
+        buttons.append([InlineKeyboardButton(
+            "➕ کسٹم میسج شامل کریں",
+            callback_data=f"add_custom_message_{gid}"
+        )])
+
+    buttons.append([InlineKeyboardButton("📋 مینیو", callback_data="force_start")])
+
+    await query.edit_message_text(
+        text="📝 *کسٹم میسج سیٹنگز*",
         reply_markup=InlineKeyboardMarkup(buttons),
         parse_mode="Markdown"
     )
@@ -564,6 +615,39 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             s = action_settings[gid]["mentions"]
             s["warn"] = not s.get("warn", False)
             return await show_mention_settings(q, gid)
+            
+        # کسٹم میسج سیٹنگز دکھائیں
+        if data.startswith("custom_settings_"):
+            gid = int(data.rsplit("_", 1)[1])
+            return await show_custom_settings(q, gid)
+
+        if data.startswith("toggle_custom_enabled_"):
+            gid = int(data.rsplit("_", 1)[1])
+            initialize_group_settings(gid)
+            s = action_settings[gid]["custom"]
+            s["enabled"] = not s["enabled"]
+            return await show_custom_settings(q, gid)
+
+        if data.startswith("cycle_custom_action_"):
+            gid = int(data.rsplit("_", 1)[1])
+            s = action_settings[gid]["custom"]
+            options = ['off', 'mute', 'ban', 'warn']
+            s["action"] = options[(options.index(s.get("action", "off")) + 1) % len(options)]
+            return await show_custom_settings(q, gid)
+
+        if data.startswith("cycle_custom_warn_count_"):
+            gid = int(data.rsplit("_", 1)[1])
+            s = action_settings[gid]["custom"]
+            count = s.get("warn_count", 1)
+            s["warn_count"] = 1 if count >= 3 else count + 1
+            return await show_custom_settings(q, gid)
+
+        if data.startswith("change_custom_duration_"):
+            gid = int(data.rsplit("_", 1)[1])
+            opts = ["30m", "1h", "6h", "1d", "3d", "7d"]
+            cur = action_settings[gid]["custom"]["duration"]
+            action_settings[gid]["custom"]["duration"] = opts[(opts.index(cur)+1) % len(opts)]
+            return await show_custom_settings(q, gid)
 
         await q.answer("❓ نامعلوم بٹن!", show_alert=True)
 
