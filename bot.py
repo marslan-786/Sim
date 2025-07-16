@@ -100,16 +100,16 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
             "chat_type": chat_type
         }
     if chat_id not in action_settings:
-    action_settings[chat_id] = {
-        "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-        "forward": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-        "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
-        "custom": {
-            "enabled": False,
-            "action": "off",       # 'off', 'mute', 'ban', 'warn'
-            "warn_count": 1,
-            "duration": "1h",
-            "messages": []         # یہاں کسٹم میسجز محفوظ ہوں گے
+        action_settings[chat_id] = {
+           "links": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+           "forward": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+           "mentions": {"action": "off", "duration": "1h", "warn": True, "delete": True, "enabled": False},
+           "custom": {
+           "enabled": False,
+           "action": "off",       # 'off', 'mute', 'ban', 'warn'
+           "warn_count": 1,
+           "duration": "1h",
+           "messages": []         # یہاں کسٹم میسجز محفوظ ہوں گے
         }
     }
     if chat_id not in admin_list:
