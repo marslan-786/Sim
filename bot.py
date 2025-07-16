@@ -12,25 +12,39 @@ from datetime import datetime, timedelta
 import pytz
 import re
 
-# Set up logging
+# Logging setup
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Database simulation
+# Simulated databases (in-memory dicts)
 group_settings = {}
 user_warnings = {}
 allowed_links = {}
 action_settings = {}
+
+def parse_duration(duration_str):
+    """
+    Parses duration strings like '1h', '30m', '2d' into timedelta.
+    """
+    number = int(re.findall(r'\d+', duration_str)[0])
+    if 'h' in duration_str:
+        return timedelta(hours=number)
+    elif 'm' in duration_str:
+        return timedelta(minutes=number)
+    elif 'd' in duration_str:
+        return timedelta(days=number)
+    else:
+        return timedelta(hours=1)  # default 1 hour
 
 class UltimateGroupBot:
     def __init__(self, token):
         self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
 
-        # Add handlers
+        # Register handlers
         self.dispatcher.add_handler(CommandHandler("start", self.start))
         self.dispatcher.add_handler(CommandHandler("settings", self.group_settings_command))
         self.dispatcher.add_handler(CommandHandler("help", self.show_help))
@@ -51,10 +65,25 @@ class UltimateGroupBot:
             )
         )
 
+    def initialize_group_settings(self, group_id):
+        if group_id not in group_settings:
+            group_settings[group_id] = {
+                "block_links": False,
+                "block_forwards": False,
+                "allowed_domains": set()
+            }
+        if group_id not in action_settings:
+            action_settings[group_id] = {
+                "links": {"action": "delete", "duration": "1h", "warn": True, "delete": True},
+                "forward": {"action": "ban", "duration": "1h", "warn": True, "delete": True}
+            }
+        if group_id not in user_warnings:
+            user_warnings[group_id] = {}
+
     def start(self, update: Update, context: CallbackContext):
         if update.message.chat.type == "private":
             keyboard = [
-                [InlineKeyboardButton("➕ Add me to Group", url="https://t.me/yourbot?startgroup=true")],
+                [InlineKeyboardButton("➕ Add me to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
                 [InlineKeyboardButton("📊 Your Groups", callback_data="your_groups")],
                 [InlineKeyboardButton("📢 Your Channels", callback_data="your_channels")],
                 [InlineKeyboardButton("❓ Help", callback_data="help_command")]
@@ -90,17 +119,16 @@ class UltimateGroupBot:
         update.message.reply_text(help_text, parse_mode="Markdown")
 
     def group_settings_command(self, update: Update, context: CallbackContext):
-        if update.message.chat.type == "channel":
-            self.show_channel_settings(update, str(update.message.chat_id))
+        chat = update.message.chat
+        group_id = str(chat.id)
+        if chat.type == "channel":
+            self.show_channel_settings(update, group_id)
         else:
-            self.show_group_settings(update, str(update.message.chat_id))
-
-    # [Previous methods remain the same until show_group_settings]
+            self.show_group_settings(update, group_id)
 
     def show_group_settings(self, update_or_query, group_id):
         self.initialize_group_settings(group_id)
         settings = group_settings[group_id]
-        actions = action_settings.get(group_id, {})
 
         keyboard = [
             [InlineKeyboardButton("🔗 Link Settings", callback_data=f"link_settings_{group_id}")],
@@ -120,7 +148,7 @@ class UltimateGroupBot:
 
     def show_channel_settings(self, update_or_query, channel_id):
         self.initialize_group_settings(channel_id)
-        
+
         keyboard = [
             [InlineKeyboardButton("↩️ Remove Forward Tag", callback_data=f"channel_fwd_{channel_id}")],
             [InlineKeyboardButton("🔙 Back", callback_data="your_channels")]
@@ -170,74 +198,241 @@ class UltimateGroupBot:
             parse_mode="Markdown"
         )
 
-    # [Add similar methods for mention_settings, forward_settings, warning_settings]
+    # Placeholder for mention, forward, warning settings views - you can expand similarly
 
     def button_handler(self, update: Update, context: CallbackContext):
         query = update.callback_query
         query.answer()
 
-        if query.data == "your_groups":
+        data = query.data
+        if data == "your_groups":
             self.show_user_groups(query)
-        elif query.data == "your_channels":
+        elif data == "your_channels":
             self.show_user_channels(query)
-        elif query.data == "help_command":
+        elif data == "help_command":
             self.show_help(query, context)
-        elif query.data.startswith("group_"):
-            group_id = query.data.split("_")[1]
+        elif data.startswith("group_"):
+            group_id = data.split("_")[1]
             self.show_group_settings(query, group_id)
-        elif query.data.startswith("channel_"):
-            channel_id = query.data.split("_")[1]
+        elif data.startswith("channel_"):
+            channel_id = data.split("_")[1]
             self.show_channel_settings(query, channel_id)
-        elif query.data.startswith("link_settings_"):
-            group_id = query.data.split("_")[2]
+        elif data.startswith("link_settings_"):
+            group_id = data.split("_")[2]
             self.show_link_settings(query, group_id)
-        # [Add more handlers for other settings]
+        # Add more button callbacks as needed
 
     def message_filter(self, update: Update, context: CallbackContext):
-        chat_id = str(update.message.chat_id)
-        self.initialize_group_settings(chat_id)
         message = update.message
-        
-        # Channel specific handling (only remove forward tag)
-        if update.message.chat.type == "channel":
-            if message.forward_from_chat:
-                # Remove forward tag logic
-                pass
+        chat_id = str(message.chat_id)
+        self.initialize_group_settings(chat_id)
+
+        # Only process groups/supergroups
+        if message.chat.type not in ['group', 'supergroup']:
             return
-            
-        # Group handling (full moderation)
-        if message.forward_date and group_settings[chat_id]["block_forwards"]:
+
+        # Check for forwarded messages block
+        if message.forward_date and group_settings[chat_id].get("block_forwards", False):
             self.handle_violation(update, context, "forward")
             return
 
-        # [Rest of your message filtering logic]
+        # Check for blocked links
+        if group_settings[chat_id].get("block_links", False):
+            entities = message.entities or []
+            text = message.text or ""
+            for entity in entities:
+                if entity.type == "url" or entity.type == "text_link":
+                    url = ""
+                    if entity.type == "url":
+                        url = text[entity.offset: entity.offset + entity.length]
+                    elif entity.type == "text_link":
+                        url = entity.url
+                    domain_allowed = any(domain in url for domain in group_settings[chat_id]["allowed_domains"])
+                    if not domain_allowed:
+                        self.handle_violation(update, context, "links")
+                        break
 
     def handle_violation(self, update: Update, context: CallbackContext, violation_type):
         chat_id = str(update.message.chat_id)
         user_id = update.message.from_user.id
         actions = action_settings.get(chat_id, {}).get(violation_type, {})
-        
+
         # Delete message if configured
         if actions.get("delete", True):
-            update.message.delete()
-        
+            try:
+                update.message.delete()
+            except Exception as e:
+                logger.warning(f"Failed to delete message: {e}")
+
         # Warn user if configured
         if actions.get("warn", True):
             self.warn_user(update, context)
-        
+
         # Take additional action if configured
         action = actions.get("action")
-        duration = self.parse_duration(actions.get("duration", "1h"))
-        
+        duration = parse_duration(actions.get("duration", "1h"))
+
         if action == "mute":
             self.mute_user_with_duration(update, context, duration)
         elif action == "ban":
             self.ban_user_with_duration(update, context, duration)
 
-    # [Add helper methods for duration parsing, etc.]
+    def warn_user(self, update: Update, context: CallbackContext):
+        chat_id = str(update.message.chat_id)
+        user_id = update.message.from_user.id
+
+        self.initialize_group_settings(chat_id)
+        if chat_id not in user_warnings:
+            user_warnings[chat_id] = {}
+
+        warns = user_warnings[chat_id].get(user_id, 0) + 1
+        user_warnings[chat_id][user_id] = warns
+
+        update.message.reply_text(f"⚠️ User {update.message.from_user.first_name} warned! Total warnings: {warns}")
+
+        # Example: Auto ban after 3 warnings
+        if warns >= 3:
+            update.message.reply_text(f"🚫 User {update.message.from_user.first_name} banned for exceeding warnings.")
+            try:
+                context.bot.kick_chat_member(chat_id=int(chat_id), user_id=user_id)
+                user_warnings[chat_id][user_id] = 0  # reset after ban
+            except Exception as e:
+                update.message.reply_text(f"Failed to ban user: {e}")
+
+    def ban_user(self, update: Update, context: CallbackContext):
+        if not update.message.reply_to_message:
+            update.message.reply_text("❗️ Please reply to the user you want to ban.")
+            return
+        chat_id = update.message.chat_id
+        user_id = update.message.reply_to_message.from_user.id
+        try:
+            context.bot.kick_chat_member(chat_id=chat_id, user_id=user_id)
+            update.message.reply_text("User has been banned.")
+        except Exception as e:
+            update.message.reply_text(f"Failed to ban user: {e}")
+
+    def unban_user(self, update: Update, context: CallbackContext):
+        if not update.message.reply_to_message:
+            update.message.reply_text("❗️ Please reply to the user you want to unban.")
+            return
+        chat_id = update.message.chat_id
+        user_id = update.message.reply_to_message.from_user.id
+        try:
+            context.bot.unban_chat_member(chat_id=chat_id, user_id=user_id)
+            update.message.reply_text("User has been unbanned.")
+        except Exception as e:
+            update.message.reply_text(f"Failed to unban user: {e}")
+
+    def mute_user(self, update: Update, context: CallbackContext):
+        if not update.message.reply_to_message:
+            update.message.reply_text("❗️ Please reply to the user you want to mute.")
+            return
+        chat_id = update.message.chat_id
+        user_id = update.message.reply_to_message.from_user.id
+        try:
+            context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=ChatPermissions(can_send_messages=False)
+            )
+            update.message.reply_text("User has been muted.")
+        except Exception as e:
+            update.message.reply_text(f"Failed to mute user: {e}")
+
+    def unmute_user(self, update: Update, context: CallbackContext):
+        if not update.message.reply_to_message:
+            update.message.reply_text("❗️ Please reply to the user you want to unmute.")
+            return
+        chat_id = update.message.chat_id
+        user_id = update.message.reply_to_message.from_user.id
+        try:
+            context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True,
+                    can_send_media_messages=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True
+                )
+            )
+            update.message.reply_text("User has been unmuted.")
+        except Exception as e:
+            update.message.reply_text(f"Failed to unmute user: {e}")
+
+    def mute_user_with_duration(self, update: Update, context: CallbackContext, duration: timedelta):
+        if not update.message.reply_to_message:
+            update.message.reply_text("❗️ Please reply to the user you want to mute.")
+            return
+        chat_id = update.message.chat_id
+        user_id = update.message.reply_to_message.from_user.id
+        until_date = datetime.utcnow() + duration
+        try:
+            context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=user_id,
+                permissions=ChatPermissions(can_send_messages=False),
+                until_date=until_date
+            )
+            update.message.reply_text(f"User muted for {duration}.")
+        except Exception as e:
+            update.message.reply_text(f"Failed to mute user: {e}")
+
+    def ban_user_with_duration(self, update: Update, context: CallbackContext, duration: timedelta):
+        if not update.message.reply_to_message:
+            update.message.reply_text("❗️ Please reply to the user you want to ban.")
+            return
+        chat_id = update.message.chat_id
+        user_id = update.message.reply_to_message.from_user.id
+        until_date = datetime.utcnow() + duration
+        try:
+            context.bot.kick_chat_member(chat_id=chat_id, user_id=user_id, until_date=until_date)
+            update.message.reply_text(f"User banned for {duration}.")
+        except Exception as e:
+            update.message.reply_text(f"Failed to ban user: {e}")
+
+    def allow_link(self, update: Update, context: CallbackContext):
+        chat_id = str(update.message.chat_id)
+        self.initialize_group_settings(chat_id)
+        if len(context.args) == 0:
+            update.message.reply_text("Please specify a domain to allow, e.g. /allowlink example.com")
+            return
+        domain = context.args[0].lower()
+        group_settings[chat_id]["allowed_domains"].add(domain)
+        update.message.reply_text(f"Allowed domain added: {domain}")
+
+    def block_link(self, update: Update, context: CallbackContext):
+        chat_id = str(update.message.chat_id)
+        self.initialize_group_settings(chat_id)
+        if len(context.args) == 0:
+            update.message.reply_text("Please specify a domain to block, e.g. /blocklink example.com")
+            return
+        domain = context.args[0].lower()
+        if domain in group_settings[chat_id]["allowed_domains"]:
+            group_settings[chat_id]["allowed_domains"].remove(domain)
+            update.message.reply_text(f"Allowed domain removed: {domain}")
+        else:
+            update.message.reply_text(f"Domain was not in allowed list: {domain}")
+
+    def show_user_groups(self, query):
+        # This should show groups where user is admin or the bot is admin; here dummy example
+        keyboard = [
+            [InlineKeyboardButton("Group 1", callback_data="group_12345")],
+            [InlineKeyboardButton("Group 2", callback_data="group_67890")],
+            [InlineKeyboardButton("🔙 Back", callback_data="start")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        query.edit_message_text("📊 *Your Groups*\n\nSelect a group to configure:", reply_markup=reply_markup, parse_mode="Markdown")
+
+    def show_user_channels(self, query):
+        # Dummy example
+        keyboard = [
+            [InlineKeyboardButton("Channel 1", callback_data="channel_11111")],
+            [InlineKeyboardButton("Channel 2", callback_data="channel_22222")],
+            [InlineKeyboardButton("🔙 Back", callback_data="start")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        query.edit_message_text("📢 *Your Channels*\n\nSelect a channel to configure:", reply_markup=reply_markup, parse_mode="Markdown")
 
 if __name__ == '__main__':
-    TOKEN = "8017193630:AAFaMRpJ7Hk-2MTibaWOR_71-NYuFgr_2_U"
-    bot = UltimateGroupBot(TOKEN)
-    bot.updater.start_polling()
-    bot.updater.idle()
+    TOKEN = "8017193630:AAFaMRpJ7Hk-2MTibaWOR_71-NYuFgr_2_U
