@@ -114,36 +114,21 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group"):
         user_warnings[chat_id] = {}
 
 # Track user's groups/channels
+# /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    initialize_user_chats(user_id)
-
-    message = update.message or (update.callback_query.message if update.callback_query else None)
-
-    if not message:
-        return  # No message found
-
-    if message.chat.type == "private":
-        keyboard = [
-            [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-            [InlineKeyboardButton("📊 My Groups", callback_data="your_groups")],
-            [InlineKeyboardButton("⚙️ Channel Settings", callback_data="channel_settings")],
-            [InlineKeyboardButton("❓ Help", callback_data="help_command")]
-        ]
-        await message.reply_text(
-            "👋 Welcome to Kami_Broken\n\n"
-            "Group Management Bot!\n"
-            "🔹 Add to your Groups/Channels\n"
-            "🔹 Configure settings\n"
-            "🔹 Admin Tools",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    else:
-        cid = message.chat.id
-        ctype = "channel" if message.chat.type == "channel" else "group"
-        user_chats[user_id][f"{ctype}s"].add(cid)
-        initialize_group_settings(cid, ctype)
-        await show_help(update, context)
+    user = update.effective_user
+    keyboard = [
+        [InlineKeyboardButton("➕ Add to Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+        [InlineKeyboardButton("👥 Your Groups", callback_data="your_groups")],
+        [InlineKeyboardButton("📢 Your Channels", callback_data="your_channels")],
+        [InlineKeyboardButton("❓ Help", callback_data="help_command")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_html(
+        f"👋 Welcome <b>{user.first_name}</b>!\n\n"
+        "I'm your group management bot. Use the buttons below to begin!",
+        reply_markup=reply_markup
+    )
 
 # /help handler
 async def show_help(update_or_query: Union[Update, CallbackQueryHandler], context=None):
