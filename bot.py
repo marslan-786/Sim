@@ -424,34 +424,45 @@ async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # /unmute ہینڈلر
 async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
-    chat = message.chat
+    chat_id = message.chat.id
     user_id = message.from_user.id
-    chat_id = chat.id
 
     if not await is_admin(chat_id, user_id, context):
         await message.reply_text("❌ صرف ایڈمنز اس کمانڈ کو استعمال کر سکتے ہیں!")
         return
 
     if not message.reply_to_message:
-        await message.reply_text("⚠️ براہ کرم اس یوزر پر ریپلائی کریں جسے ان میوٹ کرنا ہے۔")
-        return
+        return await message.reply_text("🔓 کسی میسج پر ریپلائی کر کے ان میوٹ کریں۔")
 
-    target_user = message.reply_to_message.from_user.id
+    target_id = message.reply_to_message.from_user.id
 
     try:
-        await context.bot.restrict_chat_member(
-            chat_id,
-            target_user,
-            permissions=ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True
-            )
+        # یوزر کی موجودہ permissions چیک کریں
+        member = await context.bot.get_chat_member(chat_id, target_id)
+        current_perms = member.can_send_messages
+
+        # اگر یوزر پہلے سے unmuted ہے
+        if current_perms:
+            return await message.reply_text("ℹ️ یہ یوزر پہلے ہی ان میوٹ ہے۔")
+
+        # Full permissions واپس دینا
+        full_permissions = ChatPermissions(
+            can_send_messages=True,
+            can_send_media_messages=True,
+            can_send_polls=True,
+            can_send_other_messages=True,
+            can_add_web_page_previews=True,
+            can_change_info=False,
+            can_invite_users=True,
+            can_pin_messages=False
         )
-        await message.reply_text("🔊 یوزر کو ان میوٹ کر دیا گیا ہے۔")
+
+        await context.bot.restrict_chat_member(chat_id, target_id, permissions=full_permissions)
+        await message.reply_text("🔓 یوزر کو ان میوٹ کر دیا گیا۔")
+
     except Exception as e:
-        await message.reply_text("❌ ان میوٹ کرنے میں مسئلہ آیا!")
+        logger.error(f"/unmute ایرر: {e}")
+        await message.reply_text("❌ ان میوٹ کرنے میں مسئلہ ہوا۔")
         
 # /settings کمانڈ ہینڈلر - صرف گروپ چیٹس کے لیے
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
