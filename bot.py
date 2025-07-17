@@ -529,27 +529,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = q.from_user.id
     await q.answer()
 
-    try:
-        if data == "force_start":
-            chat = q.message.chat
-            user = q.from_user
-
-            try:
-                await q.message.delete()
-            except:
-                pass
-
-            # If it's a group/supergroup
-            if chat.type in ["group", "supergroup"]:
-                # Show group settings only if the user is admin
-                if await is_admin(chat.id, user.id, context):
-                    return await show_group_settings(q, chat.id)
-                else:
-                    return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
-            else:
-                # In private or other chats, show the start menu
-                return await start(update, context)
-                
+    try:      
         if data in ["force_start", "back_to_settings"]:
             chat = q.message.chat
             user = q.from_user
