@@ -533,7 +533,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     try:      
-        elif data.startswith("back_to_settings_"):
+        if data.startswith("back_to_settings_"):
             gid = int(data.split("_")[-1])
             chat = q.message.chat
             user = q.from_user
