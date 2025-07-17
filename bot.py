@@ -166,23 +166,29 @@ async def show_user_groups(query):
 # Show group settings menu
 async def show_group_settings(update_or_query: Union[Update, CallbackQuery], gid: int):
     initialize_group_settings(gid)
-    chat_type = update_or_query.message.chat.type if isinstance(update_or_query, CallbackQuery) else update_or_query.effective_chat.type
 
-    # Buttons
     kb = [
         [InlineKeyboardButton("🔗 Link Settings", callback_data=f"link_settings_{gid}")],
         [InlineKeyboardButton("↩️ Forward Settings", callback_data=f"forward_settings_{gid}")],
         [InlineKeyboardButton("🗣 Mention Settings", callback_data=f"mention_settings_{gid}")],
-        [InlineKeyboardButton("📝 Custom Message Filter", callback_data=f"custom_settings_{gid}")]
+        [InlineKeyboardButton("📝 Custom Message Filter", callback_data=f"custom_settings_{gid}")],
+        [InlineKeyboardButton("📋 Main Menu", callback_data="force_start")]  # ✅ Always show
     ]
 
-        kb.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
-
     text = f"⚙️ *Settings for* `{gid}`\nChoose a category:"
+
     if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        await update_or_query.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(kb),
+            parse_mode="Markdown"
+        )
     else:
-        await update_or_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+        await update_or_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(kb),
+            parse_mode="Markdown"
+        )
 
 
 # Show Link Settings submenu
