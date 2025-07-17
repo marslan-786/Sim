@@ -223,7 +223,7 @@ async def show_link_settings(query, gid):
 
     chat_type = query.message.chat.type
     if chat_type in ["group", "supergroup"]:
-        buttons.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+        buttons.append([InlineKeyboardButton("🗑️ Remove", callback_data="back_to_settings")])
     else:
         buttons.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
@@ -266,7 +266,7 @@ async def show_forward_settings(query, gid):
 
     chat_type = query.message.chat.type
     if chat_type in ["group", "supergroup"]:
-        buttons.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+        buttons.append([InlineKeyboardButton("🗑️ Remove", callback_data="back_to_settings")])
     else:
         buttons.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
@@ -310,7 +310,7 @@ async def show_mention_settings(query, gid):
     # ✅ بیک بٹن کو ہمیشہ آخر میں add کرو، باہر if کے
     chat_type = query.message.chat.type
     if chat_type in ["group", "supergroup"]:
-        buttons.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+        buttons.append([InlineKeyboardButton("🗑️ Remove", callback_data="back_to_settings")])
     else:
         buttons.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
@@ -358,7 +358,7 @@ async def show_custom_settings(query, gid):
 
     chat_type = query.message.chat.type
     if chat_type in ["group", "supergroup"]:
-        buttons.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+        buttons.append([InlineKeyboardButton("🗑️ Remove", callback_data="back_to_settings")])
     else:
         buttons.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
@@ -533,8 +533,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     try:      
-        if data.startswith("back_to_settings_"):
-            gid = int(data.split("_")[-1])
+        if data in ["force_start", "back_to_settings"]:
             chat = q.message.chat
             user = q.from_user
 
@@ -543,10 +542,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-            if await is_admin(chat.id, user.id, context):
-                return await show_group_settings(q, gid)
+            if chat.type in ["group", "supergroup"]:
+                if await is_admin(chat.id, user.id, context):
+                   return await show_group_settings(q, chat.id)
+                else:
+                    return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
             else:
-                return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
+                return await start(update, context)
 
         if data == "your_groups":
             return await show_user_groups(q)
