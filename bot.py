@@ -176,9 +176,6 @@ async def show_group_settings(update_or_query: Union[Update, CallbackQuery], gid
         [InlineKeyboardButton("📝 Custom Message Filter", callback_data=f"custom_settings_{gid}")]
     ]
 
-    if chat_type in ["group", "supergroup"]:
-        kb.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
-    else:
         kb.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
     text = f"⚙️ *Settings for* `{gid}`\nChoose a category:"
