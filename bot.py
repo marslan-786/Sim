@@ -218,7 +218,10 @@ async def show_link_settings(query, gid):
             callback_data=f"change_link_duration_{gid}"
         )])
 
-    buttons.append([InlineKeyboardButton("📋 Menu", callback_data="force_start")])
+    if chat_type in ["group", "supergroup"]:
+        kb.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+    else:
+        kb.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
     await query.edit_message_text(
         text="🔗 *Link Settings*",
@@ -257,7 +260,10 @@ async def show_forward_settings(query, gid):
             callback_data=f"change_forward_duration_{gid}"
         )])
 
-    buttons.append([InlineKeyboardButton("📋 Menu", callback_data="force_start")])
+    if chat_type in ["group", "supergroup"]:
+        kb.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+    else:
+        kb.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
     await query.edit_message_text(
         text="📤 *Forward Settings*",
@@ -296,7 +302,10 @@ async def show_mention_settings(query, gid):
             callback_data=f"change_mention_duration_{gid}"
         )])
 
-    buttons.append([InlineKeyboardButton("📋 Menu", callback_data="force_start")])
+    if chat_type in ["group", "supergroup"]:
+        kb.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+    else:
+        kb.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
 
     await query.edit_message_text(
         text="👥 *Mention Settings*",
