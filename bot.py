@@ -164,15 +164,23 @@ async def show_user_groups(query):
     await query.edit_message_text("📊 Your Groups:", reply_markup=InlineKeyboardMarkup(kb))
 
 # Show group settings menu
-async def show_group_settings(update_or_query: Union[Update, CallbackQueryHandler], gid: int):
+async def show_group_settings(update_or_query: Union[Update, CallbackQuery], gid: int):
     initialize_group_settings(gid)
+    chat_type = update_or_query.message.chat.type if isinstance(update_or_query, CallbackQuery) else update_or_query.effective_chat.type
+
+    # Buttons
     kb = [
         [InlineKeyboardButton("🔗 Link Settings", callback_data=f"link_settings_{gid}")],
         [InlineKeyboardButton("↩️ Forward Settings", callback_data=f"forward_settings_{gid}")],
         [InlineKeyboardButton("🗣 Mention Settings", callback_data=f"mention_settings_{gid}")],
-        [InlineKeyboardButton("📝 Custom Message Filter", callback_data=f"custom_settings_{gid}")],
-        [InlineKeyboardButton("🔙 Back", callback_data="your_groups")]
+        [InlineKeyboardButton("📝 Custom Message Filter", callback_data=f"custom_settings_{gid}")]
     ]
+
+    if chat_type in ["group", "supergroup"]:
+        kb.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="back_to_settings")])
+    else:
+        kb.append([InlineKeyboardButton("📋 Main Menu", callback_data="force_start")])
+
     text = f"⚙️ *Settings for* `{gid}`\nChoose a category:"
     if isinstance(update_or_query, Update):
         await update_or_query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
@@ -523,6 +531,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
             else:
                 # In private or other chats, show the start menu
+                return await start(update, context)
+                
+        if data in ["force_start", "back_to_settings"]:
+            chat = q.message.chat
+            user = q.from_user
+
+            try:
+                await q.message.delete()
+            except:
+                pass
+
+            if chat.type in ["group", "supergroup"]:
+                if await is_admin(chat.id, user.id, context):
+                    return await show_group_settings(q, chat.id)
+                else:
+                    return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
+            else:
                 return await start(update, context)
 
         if data == "your_groups":
