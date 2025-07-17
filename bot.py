@@ -371,17 +371,23 @@ async def show_custom_settings(query, gid):
 # Handle messages to apply filters like custom, links, forwards, mentions
 async def message_filter_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
-    user_id = message.from_user.id
     chat_id = message.chat_id
 
-    # ✅ Only run in group/supergroup
+    # ✅ صرف group یا supergroup میں کام کرے
     if message.chat.type not in ["group", "supergroup"]:
         return
 
-    if chat_id not in group_settings or user_id == context.bot.id:
+    # ✅ اگر گروپ settings ہی نہیں یا bot کا اپنا میسج ہے، تو چھوڑ دو
+    if chat_id not in group_settings or message.from_user.id == context.bot.id:
         return
 
-    # ✅ Admin check: Skip filters if sender is admin
+    # ✅ اگر message چینل سے آیا ہے (linked channel), تو skip کر دو
+    if message.sender_chat:
+        return
+
+    user_id = message.from_user.id
+
+    # ✅ اگر بھیجنے والا admin ہے، تو فلٹر نہ لگاؤ
     if await is_admin(chat_id, user_id, context):
         return
 
