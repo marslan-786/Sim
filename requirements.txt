@@ -1,2 +1,5 @@
-python-telegram-bot==20.7
-pytz
+pillow==10.3.0
+pytesseract==0.3.10
+selenium==4.21.0
+python-telegram-bot==20.6
+openai==1.10.0
