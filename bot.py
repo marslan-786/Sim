@@ -533,7 +533,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
 
     try:      
-        if data in ["force_start", "back_to_settings"]:
+        elif data.startswith("back_to_settings_"):
+            gid = int(data.split("_")[-1])
             chat = q.message.chat
             user = q.from_user
 
@@ -542,13 +543,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-            if chat.type in ["group", "supergroup"]:
-                if await is_admin(chat.id, user.id, context):
-                    return await show_group_settings(q, chat.id)
-                else:
-                    return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
+            if await is_admin(chat.id, user.id, context):
+                return await show_group_settings(q, gid)
             else:
-                return await start(update, context)
+                return await q.answer("⚠️ Only admins can access group settings.", show_alert=True)
 
         if data == "your_groups":
             return await show_user_groups(q)
