@@ -353,6 +353,10 @@ async def message_filter_handler(update: Update, context: ContextTypes.DEFAULT_T
     if chat_id not in group_settings or user_id == context.bot.id:
         return
 
+    # ✅ Admin check: Skip filters if sender is admin
+    if await is_admin(chat_id, user_id, context):
+        return
+
     text = message.text or message.caption or ""
     is_forwarded = message.forward_from or message.forward_from_chat
     has_links = bool(re.search(r"https?://|t\.me|telegram\.me|www\.", text))
