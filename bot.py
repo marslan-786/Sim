@@ -913,6 +913,21 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await show_group_settings(update, chat.id)
+    
+async def back_to_settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    chat = query.message.chat
+    user = query.from_user
+
+    if chat.type in ["group", "supergroup"]:
+        if await is_admin(chat.id, user.id, context):
+            return await show_group_settings(query, chat.id)
+        else:
+            return await query.answer("⚠️ Only admins can access group settings.", show_alert=True)
+    else:
+        return await start(update, context)
 
 # Main app runner
 if __name__ == "__main__":
@@ -930,6 +945,7 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(start, pattern="^force_start$"))
 
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CallbackQueryHandler(back_to_settings_handler, pattern="^back_to_settings$"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_message_input_handler), group=9)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_filter_handler), group=10)
