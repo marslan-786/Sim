@@ -506,11 +506,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if data == "force_start":
+            chat = q.message.chat
+            gid = chat.id
+
             try:
                 await q.message.delete()
             except:
                 pass
-            return await start(update, context)
+
+            # گروپ میں ہوں تو سیٹنگ شو کریں، پرائیویٹ میں ہوں تو start مینیو
+            if chat.type in ["group", "supergroup"]:
+                return await show_group_settings(update, gid)
+            else:
+                return await start(update, context)
 
         if data == "your_groups":
             return await show_user_groups(q)
