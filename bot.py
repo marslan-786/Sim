@@ -530,13 +530,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     data = q.data
     uid = q.from_user.id
+    chat = q.message.chat   # یہاں define کرو
     await q.answer()
     
-    # اگر chat گروپ یا سوپرگروپ ہے تو admin چیک کرو
     if chat.type in ["group", "supergroup"]:
         member = await chat.get_member(uid)
         if member.status not in ["administrator", "creator"]:
             return await q.answer("❌ Only Admin Use This۔", show_alert=True)
+    
+    # باقی کوڈ یہاں آئے گا ...
 
     try:      
         if data in ["force_start", "back_to_settings"]:
