@@ -67,7 +67,6 @@ def initialize_group_settings(chat_id: int, chat_type: str = "group", title: str
             "title": title or f"Group {chat_id}",
             "block_links": False,
             "block_forwards": False,
-            "remove_forward_tag": False,
             "block_mentions": False,
             "allowed_domains": set(),
             "chat_type": chat_type
@@ -516,24 +515,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await show_help(q, context)
 
         if data.startswith("group_"):
-            gid = int(data.split("_",1)[1])
+            gid = int(data.split("_", 1)[1])
             if await is_admin(gid, uid, context):
                 return await show_group_settings(q, gid)
             return await q.answer("⚠️ Admins only!", show_alert=True)
 
         if data.startswith("group_settings_"):
-            gid = int(data.split("_",2)[2])
+            gid = int(data.split("_", 2)[2])
             if await is_admin(gid, uid, context):
                 return await show_group_settings(q, gid)
             return await q.answer("⚠️ Admins only!", show_alert=True)
 
         if data.startswith("link_settings_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             return await show_link_settings(q, gid)
 
         if data.startswith("mention_settings_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             return await show_mention_settings(q, gid)
+
+        if data.startswith("forward_settings_"):
+            gid = int(data.rsplit("_", 1)[1])
+            return await show_forward_settings(q, gid)
 
         if data.startswith("toggle_links_enabled_"):
             gid = int(data.rsplit("_", 1)[1])
@@ -546,29 +549,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await show_link_settings(q, gid)
 
         if data.startswith("cycle_link_action_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             s = action_settings[gid]["links"]
             options = ['off', 'mute', 'ban', 'warn']
             s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
             return await show_link_settings(q, gid)
 
         if data.startswith("cycle_link_warn_count_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             s = action_settings[gid]["links"]
             count = s.get('warn_count', 1)
-            count = 1 if count >= 3 else count + 1
-            s['warn_count'] = count
+            s['warn_count'] = 1 if count >= 3 else count + 1
             return await show_link_settings(q, gid)
 
         if data.startswith("change_link_duration_"):
-            gid = int(data.rsplit("_",1)[1])
-            opts = ["30m","1h","6h","1d","3d","7d"]
+            gid = int(data.rsplit("_", 1)[1])
+            opts = ["30m", "1h", "6h", "1d", "3d", "7d"]
             cur = action_settings[gid]["links"]["duration"]
-            action_settings[gid]["links"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
+            action_settings[gid]["links"]["duration"] = opts[(opts.index(cur) + 1) % len(opts)]
             return await show_link_settings(q, gid)
 
         if data.startswith("toggle_mention_enabled_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             initialize_group_settings(gid)
             s = action_settings[gid]["mentions"]
             s['enabled'] = not s['enabled']
@@ -578,32 +580,63 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await show_mention_settings(q, gid)
 
         if data.startswith("cycle_mention_action_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             s = action_settings[gid]["mentions"]
             options = ['off', 'mute', 'ban', 'warn']
             s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
             return await show_mention_settings(q, gid)
 
         if data.startswith("cycle_mention_warn_count_"):
-            gid = int(data.rsplit("_",1)[1])
+            gid = int(data.rsplit("_", 1)[1])
             s = action_settings[gid]["mentions"]
             count = s.get('warn_count', 1)
-            count = 1 if count >= 3 else count + 1
-            s['warn_count'] = count
+            s['warn_count'] = 1 if count >= 3 else count + 1
             return await show_mention_settings(q, gid)
 
         if data.startswith("change_mention_duration_"):
-            gid = int(data.rsplit("_",1)[1])
-            opts = ["30m","1h","6h","1d","3d","7d"]
+            gid = int(data.rsplit("_", 1)[1])
+            opts = ["30m", "1h", "6h", "1d", "3d", "7d"]
             cur = action_settings[gid]["mentions"]["duration"]
-            action_settings[gid]["mentions"]["duration"] = opts[(opts.index(cur)+1)%len(opts)]
+            action_settings[gid]["mentions"]["duration"] = opts[(opts.index(cur) + 1) % len(opts)]
             return await show_mention_settings(q, gid)
+
+        # ✅ Forward filters logic (added)
+        if data.startswith("toggle_forward_enabled_"):
+            gid = int(data.rsplit("_", 1)[1])
+            initialize_group_settings(gid)
+            s = action_settings[gid]["forward"]
+            s["enabled"] = not s["enabled"]
+            group_settings[gid]["block_forwards"] = s["enabled"]
+            if not s["enabled"]:
+                s["action"] = "off"
+            return await show_forward_settings(q, gid)
+
+        if data.startswith("cycle_forward_action_"):
+            gid = int(data.rsplit("_", 1)[1])
+            s = action_settings[gid]["forward"]
+            options = ['off', 'mute', 'ban', 'warn']
+            s['action'] = options[(options.index(s.get('action', 'off')) + 1) % len(options)]
+            return await show_forward_settings(q, gid)
+
+        if data.startswith("cycle_forward_warn_count_"):
+            gid = int(data.rsplit("_", 1)[1])
+            s = action_settings[gid]["forward"]
+            count = s.get('warn_count', 1)
+            s['warn_count'] = 1 if count >= 3 else count + 1
+            return await show_forward_settings(q, gid)
+
+        if data.startswith("change_forward_duration_"):
+            gid = int(data.rsplit("_", 1)[1])
+            opts = ["30m", "1h", "6h", "1d", "3d", "7d"]
+            cur = action_settings[gid]["forward"]["duration"]
+            action_settings[gid]["forward"]["duration"] = opts[(opts.index(cur) + 1) % len(opts)]
+            return await show_forward_settings(q, gid)
 
         if data.startswith("unmute_"):
             _, gid, uid = data.split("_")
             gid, uid = int(gid), int(uid)
             if not await is_admin(gid, q.from_user.id, context):
-               return await q.answer("⚠️ Only admins can perform this action.", show_alert=True)
+                return await q.answer("⚠️ Only admins can perform this action.", show_alert=True)
             try:
                 permissions = ChatPermissions(can_send_messages=True)
                 await context.bot.restrict_chat_member(gid, uid, permissions=permissions)
@@ -689,10 +722,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             gid = int(data.rsplit("_", 1)[1])
             user_state[uid] = {"state": "awaiting_custom_message", "gid": gid}
             await q.edit_message_text(
-              "✏️ Please send your custom messages, separated by spaces like:\n\n"
-              "`bio ib number`\n\n"
-              "📌 Each word will be saved individually.",
-              parse_mode="Markdown"
+                "✏️ Please send your custom messages, separated by spaces like:\n\n"
+                "`bio ib number`\n\n"
+                "📌 Each word will be saved individually.",
+                parse_mode="Markdown"
             )
             return
 
